@@ -17,7 +17,7 @@
 
 GharSync brings customers, home assets, local service professionals and business operations into one platform. The product is being developed in phases, with tenant-aware data boundaries and modular feature ownership from the start.
 
-Phases 1–3 provide the responsive public/auth experience, organization and session foundations, and the first business console with a database-backed dashboard and customer CRM. Feature work continues in reviewable product phases; booking, billing, inventory and other modules remain on the roadmap.
+Phases 1–7 provide the responsive public/auth experience, organization and session foundations, customer CRM, home passports, booking workflows, technician operations, branch inventory and warranty tracking.
 
 ## Product direction
 
@@ -33,7 +33,7 @@ flowchart LR
   Customer[Customer / Business staff] --> Web[Next.js web app]
   Web -->|Versioned REST /api/v1| API[NestJS API]
   API --> Prisma[Prisma data layer]
-  Prisma --> PG[(PostgreSQL)]
+  Prisma --> PG[(PGlite local / PostgreSQL production)]
   API --> Redis[(Redis / BullMQ foundation)]
   API -. Delivery adapters .-> Providers[SMS · Email]
   API -. Phase 8 AI adapter .-> LLM[Configurable LLM provider]
@@ -61,32 +61,24 @@ Web screens belong in route folders under `apps/web/src/app`; reusable UI belong
 
 - Node.js 22.22.3+ or 24.15.0+ (required by the NestJS 12 CLI toolchain)
 - npm 10 or newer
-- Docker Desktop or Docker Engine with Compose
+- No Docker or separately installed database is needed for local development; Docker Compose PostgreSQL remains optional
 
 ### Start
 
 ```bash
 cp .env.example .env
 npm install
-npm run infra:up
 npm run db:generate
-npm run db:migrate
-npm run db:seed
-npm run dev:web
-```
-
-In a second terminal, start the API:
-
-```bash
-npm run dev:api
+npm run dev:all
 ```
 
 - Web app: <http://localhost:3000>
 - API health: <http://localhost:4000/api/v1/health>
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
+- Stop both services with `Ctrl+C` in the VS Code terminal.
 
-The checked-in Prisma migrations are applied when the local PostgreSQL database is available. Run the seed command to install/update the role permission catalog; it does not insert fake customer or booking records. Phase 4 adds customer properties, appliance/assets, service history, private QR entry and private document uploads. Phase 5 adds a branch-aware service catalog, booking assignment and status history, quote revisions/decisions, invoice PDF output, pending/verified payment receipts and auditable manual refunds. Customer quote decisions are recorded by staff; homeowner login/notifications and payment gateway settlement are future integrations. Local document files are stored under `var/documents` by default (or `DOCUMENT_STORAGE_PATH`) and need persistent storage and backups in deployment. API authentication requires three independent secrets in `.env`; generate them with `openssl rand -base64 48`. SMS verification requires a compatible SMS provider. Password recovery and email invitations require a configured email provider. Provider adapters expect a POST JSON endpoint using a Bearer key; adjust the adapter if your provider uses another contract.
+`npm run dev:all` starts the API and web app from one terminal. In development, the API runs persistent PostgreSQL-compatible PGlite inside Node at `var/pglite`, auto-applies checked-in migrations and seeds permissions. No Docker, PostgreSQL installation or Redis service is needed. The development OTP (`123456`) is printed to the API terminal and local-only JWT keys are used when development secrets are blank; production mode disables those fallbacks. Set `DATABASE_MODE=postgres` and configure `DATABASE_URL` to use PostgreSQL. Email invitations/password recovery still need an email provider; without it, invites provide a shareable link. Local files are under `var/documents` by default and require backups in production.
+
+Open **Terminal → Run Build Task** in VS Code to start both apps. `.vscode/tasks.json` also includes a validation task.
 
 ### Useful commands
 
@@ -94,12 +86,14 @@ The checked-in Prisma migrations are applied when the local PostgreSQL database 
 |---|---|
 | `npm run dev:web` | Start the Next.js app |
 | `npm run dev:api` | Start the NestJS API in watch mode |
+| `npm run dev:all` | Start API and web app; local API runs the embedded database |
 | `npm run build:web` | Build the web app |
 | `npm run build:api` | Build the API |
 | `npm run typecheck` | Type-check configured workspaces |
 | `npm test` | Run configured workspace unit tests |
-| `npm run infra:up` | Start local PostgreSQL and Redis |
-| `npm run infra:down` | Stop local services (keeps named volumes) |
+| `npm run infra:up` | Optional: start PostgreSQL and Redis with Docker Compose |
+| `npm run infra:down` | Optional: stop Docker services (keeps named volumes) |
+| `node scripts/e2e-local.mjs` | Validate Phases 1–7 against the running local API |
 | `npm run db:generate` | Generate Prisma Client |
 | `npm run db:migrate` | Create/apply a local Prisma migration |
 
@@ -119,7 +113,7 @@ Copy `.env.example` to `.env`, generate distinct values for `JWT_ACCESS_SECRET`,
 
 ## Delivery phases
 
-See [the development phase plan](docs/DEVELOPMENT_PHASES.md) for scope, team ownership and exit criteria. Phases 1–3 are implemented in code. Database migration application and provider setup are pending local environment readiness; later workflow phases can proceed against reviewed shared contracts and schema ownership.
+See [the development phase plan](docs/DEVELOPMENT_PHASES.md) for scope, team ownership and exit criteria. Phases 1–7 are implemented and run locally with embedded database migrations. Production deployment still requires PostgreSQL and provider configuration.
 
 ## License
 

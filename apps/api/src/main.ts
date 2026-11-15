@@ -1,9 +1,12 @@
 import "reflect-metadata";
-import { StandardSchemaValidationPipe, ValidationPipe } from "@nestjs/common";
+import dotenv from "dotenv";
+import { StandardSchemaValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { AppModule } from "./app.module.js";
+
+dotenv.config({ path: ["../../.env", ".env"] });
 
 async function bootstrap() {
+  const { AppModule } = await import("./app.module.js");
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api/v1");
   const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
@@ -11,7 +14,6 @@ async function bootstrap() {
   app.enableCsrfProtection({ trustedOrigins: [webOrigin] });
   app.useGlobalPipes(
     new StandardSchemaValidationPipe(),
-    new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );
   await app.listen(Number(process.env.API_PORT ?? 4000), "0.0.0.0");
 }

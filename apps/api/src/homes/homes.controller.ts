@@ -36,6 +36,10 @@ export class HomesController {
   @RequirePermission("properties.read")
   assets(@CurrentAuth() auth: AuthContext, @Query("propertyId", { schema: z.uuid().optional() }) propertyId?: string) { return this.homes.listAssets(auth, propertyId); }
 
+  @Get("assets/warranty-expiring")
+  @RequirePermission("properties.read")
+  expiringWarranties(@CurrentAuth() auth: AuthContext, @Query("days", { schema: z.coerce.number().int().min(1).max(180).optional() }) days?: number) { return this.homes.expiringWarranties(auth, days); }
+
   @Post("assets")
   @RequirePermission("properties.manage")
   createAsset(@CurrentAuth() auth: AuthContext, @Body({ schema: assetCreateSchema }) body: z.infer<typeof assetCreateSchema>) { return this.homes.createAsset(auth, body); }

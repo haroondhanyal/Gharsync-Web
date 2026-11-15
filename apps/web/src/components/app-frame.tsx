@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench } from "lucide-react";
+import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench, CalendarClock, Boxes, ShieldCheck } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -14,6 +14,9 @@ const navigation = [
   { href: "/bookings", label: "Bookings", icon: ListTodo },
   { href: "/services", label: "Services", icon: Wrench },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/workforce", label: "Workforce", icon: CalendarClock },
+  { href: "/inventory", label: "Inventory", icon: Boxes },
+  { href: "/warranty", label: "Warranty", icon: ShieldCheck },
   { href: "/team", label: "Team & branches", icon: UsersRound },
 ];
 
@@ -22,7 +25,7 @@ export function AppFrame({ user, organizationId, active, children }: { user: Use
   const selected = organizations.find((organization) => organization.id === organizationId);
   const role = user.memberships.find((membership) => membership.organization.id === organizationId)?.role;
   const canManageTeam = role === "OWNER" || role === "ADMIN";
-  const visibleNavigation = navigation.filter((item) => (item.href !== "/team" || canManageTeam) && (role !== "TECHNICIAN" || (item.href !== "/customers" && item.href !== "/invoices")));
+  const visibleNavigation = navigation.filter((item) => (item.href !== "/team" || canManageTeam) && (role !== "TECHNICIAN" || (item.href !== "/customers" && item.href !== "/invoices" && item.href !== "/inventory" && item.href !== "/warranty")));
   return <div className="business-app">
     <aside className="app-sidebar">
       <div className="sidebar-brand"><Brand light /><span className="business-label">BUSINESS</span></div>

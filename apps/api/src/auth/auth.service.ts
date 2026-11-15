@@ -12,6 +12,7 @@ import { type AuthContext } from "./auth-context.js";
 import { DeliveryService } from "./delivery.service.js";
 import { PasswordHasherService } from "./password-hasher.service.js";
 import { PhoneOtpService } from "./phone-otp.service.js";
+import { authSecret } from "./auth-secrets.js";
 
 const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -43,11 +44,11 @@ export class AuthService {
     const issuer = "gharsync-api";
     const accessToken = await this.jwt.signAsync(
       { sub: userId, sid: sessionId, orgId: organizationId, use: "access" },
-      { secret: this.config.getOrThrow<string>("JWT_ACCESS_SECRET"), issuer, audience: "gharsync-web", expiresIn: ACCESS_TTL_SECONDS },
+      { secret: authSecret(this.config, "JWT_ACCESS_SECRET"), issuer, audience: "gharsync-web", expiresIn: ACCESS_TTL_SECONDS },
     );
     const refreshToken = await this.jwt.signAsync(
       { sub: userId, sid: sessionId, fid: familyId, use: "refresh" },
-      { secret: this.config.getOrThrow<string>("JWT_REFRESH_SECRET"), issuer, audience: "gharsync-refresh", expiresIn: REFRESH_TTL_SECONDS },
+      { secret: authSecret(this.config, "JWT_REFRESH_SECRET"), issuer, audience: "gharsync-refresh", expiresIn: REFRESH_TTL_SECONDS },
     );
     return { accessToken, refreshToken };
   }
@@ -86,7 +87,7 @@ export class AuthService {
     businessType?: string;
     city?: string;
   }, info: RequestInfo) {
-    if (!this.config.get<string>("JWT_ACCESS_SECRET") || !this.config.get<string>("JWT_REFRESH_SECRET")) {
+    try { authSecret(this.config, "JWT_ACCESS_SECRET"); authSecret(this.config, "JWT_REFRESH_SECRET"); } catch {
       throw new ServiceUnavailableException("Authentication is not configured. Set the JWT secrets first.");
     }
     if (!this.delivery.smsConfigured) throw new ServiceUnavailableException("Phone verification delivery is not configured yet.");

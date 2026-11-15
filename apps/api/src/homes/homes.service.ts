@@ -70,6 +70,12 @@ export class HomesService {
     return this.prisma.asset.findMany({ where: { organizationId: auth.organizationId!, ...(auth.branchId ? { property: { customer: { branchId: auth.branchId } } } : {}), ...(propertyId ? { propertyId } : {}), deletedAt: null }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], select: { id: true, propertyId: true, category: true, brand: true, model: true, serialNumber: true, qrCode: true, purchasedAt: true, installedAt: true, warrantyStartsAt: true, warrantyEndsAt: true, createdAt: true, property: { select: { id: true, name: true, city: true, customer: { select: { id: true, fullName: true } } } }, _count: { select: { bookings: true, documents: true } } } });
   }
 
+  async expiringWarranties(auth: AuthContext, days = 60) {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + Math.min(Math.max(days, 1), 180) * 24 * 60 * 60_000);
+    return this.prisma.asset.findMany({ where: { organizationId: auth.organizationId!, deletedAt: null, warrantyEndsAt: { gte: now, lte: cutoff }, ...(auth.branchId ? { property: { customer: { branchId: auth.branchId } } } : {}) }, orderBy: { warrantyEndsAt: "asc" }, select: { id: true, category: true, brand: true, model: true, serialNumber: true, warrantyStartsAt: true, warrantyEndsAt: true, property: { select: { id: true, name: true, city: true } } } });
+  }
+
   async getAsset(auth: AuthContext, assetId: string) {
     const asset = await this.prisma.asset.findFirst({ where: { id: assetId, organizationId: auth.organizationId!, ...(auth.branchId ? { property: { customer: { branchId: auth.branchId } } } : {}), deletedAt: null }, select: { id: true, organizationId: true, propertyId: true, category: true, brand: true, model: true, serialNumber: true, qrCode: true, purchasedAt: true, installedAt: true, warrantyStartsAt: true, warrantyEndsAt: true, purchasePrice: true, seller: true, createdAt: true, property: { select: { id: true, name: true, address: true, city: true, customer: { select: { id: true, fullName: true, phone: true } } } }, bookings: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, take: 50, select: { id: true, status: true, urgency: true, description: true, createdAt: true, scheduledAt: true, service: { select: { name: true } } } }, documents: { where: { deletedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true, fileName: true, mimeType: true, sizeBytes: true, createdAt: true } } } });
     if (!asset) throw new NotFoundException("Asset not found.");

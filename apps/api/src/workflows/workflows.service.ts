@@ -16,7 +16,7 @@ const bookingSelect = {
   customer: { select: { id: true, fullName: true, phone: true, email: true } },
   property: { select: { id: true, name: true, address: true, city: true } },
   asset: { select: { id: true, category: true, brand: true, model: true } },
-  service: { select: { id: true, name: true, category: true } },
+  service: { select: { id: true, name: true, category: true, requiredSkills: true, durationMins: true } },
   assignedMember: { select: { id: true, role: true, branchId: true, user: { select: { id: true, fullName: true, phone: true } } } },
   events: { orderBy: { createdAt: "asc" as const }, select: { id: true, fromStatus: true, toStatus: true, note: true, createdAt: true, actor: { select: { id: true, fullName: true } } } },
   quotes: { orderBy: { revision: "desc" as const }, take: 1, select: { id: true, revision: true, status: true, currency: true, subtotal: true, discount: true, tax: true, total: true, validUntil: true, createdAt: true } },
@@ -100,7 +100,7 @@ export class WorkflowsService {
   }
 
   listTechnicians(auth: AuthContext) {
-    return this.prisma.organizationMember.findMany({ where: { organizationId: auth.organizationId!, status: "ACTIVE", role: OrganizationRole.TECHNICIAN, ...(auth.branchId ? { OR: [{ branchId: auth.branchId }, { branchId: null }] } : {}) }, orderBy: { user: { fullName: "asc" } }, select: { id: true, branchId: true, user: { select: { id: true, fullName: true, phone: true } }, branch: { select: { name: true } } } });
+    return this.prisma.organizationMember.findMany({ where: { organizationId: auth.organizationId!, status: "ACTIVE", role: OrganizationRole.TECHNICIAN, ...(auth.branchId ? { OR: [{ branchId: auth.branchId }, { branchId: null }] } : {}) }, orderBy: { user: { fullName: "asc" } }, select: { id: true, branchId: true, user: { select: { id: true, fullName: true, phone: true } }, branch: { select: { name: true } }, technicianProfile: { select: { skills: true, isAvailable: true, availability: { orderBy: { weekday: "asc" }, select: { weekday: true, startMinute: true, endMinute: true, isAvailable: true } } } } } });
   }
 
   async getBooking(auth: AuthContext, bookingId: string) {
@@ -167,8 +167,25 @@ export class WorkflowsService {
     let assignedMemberId = input.assignedMemberId === undefined ? booking.assignedMemberId : input.assignedMemberId;
     if (next === BookingStatus.ASSIGNED) {
       if (!assignedMemberId) throw new BadRequestException("Select a technician for this booking.");
-      const technician = await this.prisma.organizationMember.findFirst({ where: { id: assignedMemberId, organizationId: auth.organizationId!, status: "ACTIVE", role: OrganizationRole.TECHNICIAN, ...(booking.branchId ? { OR: [{ branchId: booking.branchId }, { branchId: null }] } : {}) }, select: { id: true } });
+      const scheduledAt = new Date(input.scheduledAt ?? booking.scheduledAt!);
+      const service = await this.prisma.booking.findUniqueOrThrow({ where: { id: booking.id }, select: { service: { select: { requiredSkills: true, durationMins: true } }, organization: { select: { timezone: true } } } });
+      const appointmentEnd = new Date(scheduledAt.getTime() + (service.service?.durationMins ?? 60) * 60_000);
+      const technician = await this.prisma.organizationMember.findFirst({ where: { id: assignedMemberId, organizationId: auth.organizationId!, status: "ACTIVE", role: OrganizationRole.TECHNICIAN, ...(booking.branchId ? { OR: [{ branchId: booking.branchId }, { branchId: null }] } : {}) }, select: { id: true, technicianProfile: { select: { skills: true, isAvailable: true, availability: true, timeOff: { where: { status: "APPROVED", startsAt: { lt: appointmentEnd }, endsAt: { gt: scheduledAt } }, select: { id: true } } } } } });
       if (!technician) throw new BadRequestException("Choose an active technician in this organization and branch.");
+      const profile = technician.technicianProfile;
+      if (!profile?.isAvailable) throw new ConflictException("This technician is not available for new assignments.");
+      const skillSet = new Set(profile.skills.map((skill) => skill.toLocaleLowerCase()));
+      if (service.service?.requiredSkills.some((skill) => !skillSet.has(skill.toLocaleLowerCase()))) throw new ConflictException("The selected technician does not have all skills required by this service.");
+      const localParts = new Intl.DateTimeFormat("en-US", { timeZone: service.organization.timezone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(scheduledAt);
+      const weekdayIndex = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(localParts.find((part) => part.type === "weekday")?.value ?? "");
+      const startMinute = Number(localParts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(localParts.find((part) => part.type === "minute")?.value ?? 0);
+      const endMinute = startMinute + (service.service?.durationMins ?? 60);
+      const workSlot = profile.availability.find((slot) => slot.weekday === weekdayIndex && slot.isAvailable && startMinute >= slot.startMinute && endMinute <= slot.endMinute);
+      if (!workSlot) throw new ConflictException("The technician is outside their saved working hours for this appointment.");
+      if (profile.timeOff.length) throw new ConflictException("The technician has approved time off during this appointment.");
+      const slotEnd = new Date(scheduledAt.getTime() + (service.service?.durationMins ?? 60) * 60_000);
+      const overlapping = await this.prisma.booking.findMany({ where: { id: { not: booking.id }, organizationId: auth.organizationId!, assignedMemberId, status: { in: [BookingStatus.ASSIGNED, BookingStatus.SCHEDULED, BookingStatus.TECHNICIAN_EN_ROUTE, BookingStatus.IN_PROGRESS] }, scheduledAt: { lt: slotEnd, gte: new Date(scheduledAt.getTime() - 24 * 60 * 60_000) } }, select: { scheduledAt: true, service: { select: { durationMins: true } } } });
+      if (overlapping.some((other) => other.scheduledAt && scheduledAt < new Date(other.scheduledAt.getTime() + (other.service?.durationMins ?? 60) * 60_000) && other.scheduledAt < slotEnd)) throw new ConflictException("The technician already has a conflicting job at this time.");
     }
     if (next === BookingStatus.SCHEDULED && input.assignedMemberId === null) assignedMemberId = null;
     const updated = await this.prisma.$transaction(async (tx) => {

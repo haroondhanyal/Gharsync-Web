@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GharSync: Start web + API (embedded database)",
+      "type": "shell",
+      "command": "npm run dev:all",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "GharSync: Validate all phases",
+      "type": "shell",
+      "command": "npm run typecheck && npm run build:api && npm run build:web && npm test",
+      "problemMatcher": []
+    }
+  ]
+}

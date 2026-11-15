@@ -11,6 +11,7 @@ import { HomesModule } from "./homes/homes.module.js";
 import { WorkflowsModule } from "./workflows/workflows.module.js";
 import { OrganizationsModule } from "./organizations/organizations.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
+import { OperationsModule } from "./operations/operations.module.js";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PrismaModule } from "./prisma/prisma.module.js";
     DashboardModule,
     HomesModule,
     WorkflowsModule,
+    OperationsModule,
   ],
   controllers: [HealthController],
   providers: [

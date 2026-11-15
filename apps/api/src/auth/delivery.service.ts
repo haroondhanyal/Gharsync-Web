@@ -6,14 +6,20 @@ export class DeliveryService {
   constructor(private readonly config: ConfigService) {}
 
   get smsConfigured() {
-    return Boolean(this.config.get<string>("SMS_PROVIDER_URL") && this.config.get<string>("SMS_PROVIDER_API_KEY"));
+    return Boolean((this.config.get<string>("SMS_PROVIDER_URL") && this.config.get<string>("SMS_PROVIDER_API_KEY")) || this.localDeliveryEnabled);
   }
+
+  private get localDeliveryEnabled() { return this.config.get<string>("NODE_ENV") === "development" && this.config.get<string>("LOCAL_DEV_DELIVERY") !== "false"; }
 
   get emailConfigured() {
     return Boolean(this.config.get<string>("EMAIL_PROVIDER_URL") && this.config.get<string>("EMAIL_PROVIDER_API_KEY"));
   }
 
   async sendSms(to: string, message: string) {
+    if (this.localDeliveryEnabled) {
+      console.info(`[GharSync local SMS] ${to}: ${message}`);
+      return;
+    }
     const url = this.config.get<string>("SMS_PROVIDER_URL");
     const apiKey = this.config.get<string>("SMS_PROVIDER_API_KEY");
     if (!url || !apiKey) throw new ServiceUnavailableException("Phone verification delivery is not configured yet.");

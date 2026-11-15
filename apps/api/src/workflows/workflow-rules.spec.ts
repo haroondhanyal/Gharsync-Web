@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BookingStatus, InvoiceStatus } from "../generated/prisma/enums.js";
-import { assetCreateSchema, bookingCreateSchema, documentTargetSchema, paymentCreateSchema } from "@gharsync/validation";
+import { assetCreateSchema, bookingCreateSchema, documentTargetSchema, paymentCreateSchema, stockMovementSchema, technicianAvailabilitySchema, technicianTimeOffSchema, warrantyClaimUpdateSchema } from "@gharsync/validation";
 import { calculateQuoteTotals, canTransitionBooking, invoiceOutstanding, invoiceStatusFromLedger } from "./workflow-rules.js";
 
 test("booking workflow allows the intended path and rejects skipping approval", () => {
@@ -40,4 +40,27 @@ test("document uploads must target one record and asset dates/prices are validat
 test("payment requests require a positive amount and idempotency key", () => {
   assert.equal(paymentCreateSchema.safeParse({ amount: 0, method: "CASH", idempotencyKey: "request-0001" }).success, false);
   assert.equal(paymentCreateSchema.safeParse({ amount: 25, method: "CASH", idempotencyKey: "request-0001" }).success, true);
+});
+
+test("weekly availability and leave require valid time windows", () => {
+  assert.equal(technicianAvailabilitySchema.safeParse({ days: [{ weekday: 1, startMinute: 540, endMinute: 1020 }] }).success, true);
+  assert.equal(technicianAvailabilitySchema.safeParse({ days: [{ weekday: 1, startMinute: 1020, endMinute: 540 }] }).success, false);
+  assert.equal(technicianAvailabilitySchema.safeParse({ days: [{ weekday: 1, startMinute: 540, endMinute: 1020 }, { weekday: 1, startMinute: 600, endMinute: 700 }] }).success, false);
+  assert.equal(technicianTimeOffSchema.safeParse({ startsAt: "2027-03-01T09:00:00.000Z", endsAt: "2027-03-01T17:00:00.000Z" }).success, true);
+  assert.equal(technicianTimeOffSchema.safeParse({ startsAt: "2027-03-02T09:00:00.000Z", endsAt: "2027-03-01T17:00:00.000Z" }).success, false);
+});
+
+test("stock movements enforce positive quantity rules and explicit branch transfers", () => {
+  const productId = "0a1b2c3d-4e5f-4a1b-8c9d-0e1f2a3b4c5d";
+  const branchId = "1a1b2c3d-4e5f-4a1b-8c9d-0e1f2a3b4c5d";
+  const destinationBranchId = "2a1b2c3d-4e5f-4a1b-8c9d-0e1f2a3b4c5d";
+  assert.equal(stockMovementSchema.safeParse({ productId, type: "ADJUSTMENT", quantity: -2 }).success, true);
+  assert.equal(stockMovementSchema.safeParse({ productId, type: "CONSUMPTION", quantity: -2 }).success, false);
+  assert.equal(stockMovementSchema.safeParse({ productId, branchId, type: "TRANSFER", quantity: 1 }).success, false);
+  assert.equal(stockMovementSchema.safeParse({ productId, branchId, destinationBranchId, type: "TRANSFER", quantity: 1 }).success, true);
+});
+
+test("warranty claim changes follow the controlled status choices", () => {
+  assert.equal(warrantyClaimUpdateSchema.safeParse({ status: "SUBMITTED" }).success, true);
+  assert.equal(warrantyClaimUpdateSchema.safeParse({ status: "DRAFT" }).success, false);
 });

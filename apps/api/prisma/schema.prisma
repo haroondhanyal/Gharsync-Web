@@ -74,6 +74,30 @@ enum PaymentMethod {
   OTHER
 }
 
+enum TimeOffStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StockMovementType {
+  RECEIPT
+  ADJUSTMENT
+  RESERVATION
+  RELEASE
+  CONSUMPTION
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+enum WarrantyClaimStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  RESOLVED
+}
+
 model User {
   id           String                 @id @default(uuid()) @db.Uuid
   email        String                 @unique @db.VarChar(320)
@@ -98,6 +122,8 @@ model User {
   recordedPayments Payment[] @relation("PaymentRecorder")
   verifiedPayments Payment[] @relation("PaymentVerifier")
   processedRefunds Refund[]
+  reviewedTimeOff TechnicianTimeOff[] @relation("TimeOffReviewer")
+  createdStockMovements StockMovement[] @relation("StockMovementCreator")
 
   @@index([phone])
   @@map("users")
@@ -130,6 +156,12 @@ model Organization {
   invoices    Invoice[]
   payments    Payment[]
   refunds     Refund[]
+  suppliers Supplier[]
+  inventoryProducts InventoryProduct[]
+  stocks InventoryStock[]
+  stockMovements StockMovement[]
+  warrantyClaims WarrantyClaim[]
+  technicianProfiles TechnicianProfile[]
 
   @@index([deletedAt])
   @@map("organizations")
@@ -148,6 +180,7 @@ model OrganizationMember {
   branchId       String?          @db.Uuid
   branch         Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
   assignedBookings Booking[]      @relation("BookingAssignee")
+  technicianProfile TechnicianProfile?
 
   @@unique([organizationId, userId])
   @@index([organizationId, role, status])
@@ -177,6 +210,9 @@ model Branch {
   invoices       Invoice[]
   payments       Payment[]
   refunds        Refund[]
+  stocks InventoryStock[]
+  stockMovements StockMovement[]
+  warrantyClaims WarrantyClaim[]
 
   @@unique([organizationId, name])
   @@index([organizationId, city])
@@ -274,6 +310,7 @@ model Asset {
   property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   bookings       Booking[]
   documents      Document[]
+  warrantyClaims WarrantyClaim[]
 
   @@unique([organizationId, serialNumber])
   @@index([organizationId, category])
@@ -351,6 +388,7 @@ model Booking {
   quotes         Quote[]
   invoices       Invoice[]
   documents      Document[]
+  stockMovements StockMovement[]
 
   @@index([organizationId, status, createdAt])
   @@index([organizationId, branchId, scheduledAt])
@@ -661,4 +699,171 @@ model OrganizationInvite {
   @@index([organizationId, email, acceptedAt])
   @@index([expiresAt, acceptedAt])
   @@map("organization_invites")
+}
+
+model TechnicianProfile {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @db.Uuid
+  memberId            String                  @unique @db.Uuid
+  skills              String[]                @default([])
+  employmentType      String                  @default("FULL_TIME") @db.VarChar(30)
+  hourlyRate          Decimal?                @db.Decimal(12, 2)
+  bio                 String?                 @db.Text
+  isAvailable         Boolean                 @default(true)
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  member              OrganizationMember      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  availability        TechnicianAvailability[]
+  timeOff             TechnicianTimeOff[]
+
+  @@index([organizationId, isAvailable])
+  @@map("technician_profiles")
+}
+
+model TechnicianAvailability {
+  id           String            @id @default(uuid()) @db.Uuid
+  profileId    String            @db.Uuid
+  weekday      Int
+  startMinute  Int
+  endMinute    Int
+  isAvailable  Boolean           @default(true)
+  profile      TechnicianProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, weekday])
+  @@map("technician_availability")
+}
+
+model TechnicianTimeOff {
+  id            String            @id @default(uuid()) @db.Uuid
+  profileId     String            @db.Uuid
+  startsAt      DateTime
+  endsAt        DateTime
+  reason        String?           @db.VarChar(240)
+  status        TimeOffStatus     @default(PENDING)
+  reviewedById  String?           @db.Uuid
+  createdAt     DateTime          @default(now())
+  profile       TechnicianProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  reviewedBy    User?             @relation("TimeOffReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([profileId, startsAt, endsAt])
+  @@map("technician_time_off")
+}
+
+model Supplier {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @db.Uuid
+  name           String              @db.VarChar(180)
+  phone          String?             @db.VarChar(32)
+  email          String?             @db.VarChar(320)
+  address        String?             @db.VarChar(500)
+  notes          String?             @db.Text
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products       InventoryProduct[]
+  warrantyClaims WarrantyClaim[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive, name])
+  @@map("suppliers")
+}
+
+model InventoryProduct {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  supplierId     String?          @db.Uuid
+  sku            String           @db.VarChar(80)
+  name           String           @db.VarChar(180)
+  category       String           @db.VarChar(100)
+  description    String?          @db.Text
+  unit           String           @default("unit") @db.VarChar(30)
+  unitCost       Decimal          @default(0) @db.Decimal(12, 2)
+  reorderLevel   Decimal          @default(0) @db.Decimal(12, 2)
+  tracksWarranty Boolean          @default(false)
+  warrantyDays  Int?
+  isActive       Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier       Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  stocks         InventoryStock[]
+  movements      StockMovement[]
+  warrantyClaims WarrantyClaim[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId, category, isActive])
+  @@map("inventory_products")
+}
+
+model InventoryStock {
+  id             String          @id @default(uuid()) @db.Uuid
+  organizationId String          @db.Uuid
+  branchId       String          @db.Uuid
+  productId      String          @db.Uuid
+  quantity       Decimal         @default(0) @db.Decimal(12, 2)
+  reserved       Decimal         @default(0) @db.Decimal(12, 2)
+  updatedAt      DateTime        @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product        InventoryProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, productId])
+  @@index([organizationId, branchId])
+  @@map("inventory_stocks")
+}
+
+model StockMovement {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @db.Uuid
+  branchId       String            @db.Uuid
+  productId      String            @db.Uuid
+  bookingId      String?           @db.Uuid
+  transferGroupId String?          @db.Uuid
+  createdById    String            @db.Uuid
+  type           StockMovementType
+  quantity       Decimal           @db.Decimal(12, 2)
+  unitCost       Decimal?          @db.Decimal(12, 2)
+  reference      String?           @db.VarChar(120)
+  notes          String?           @db.VarChar(500)
+  createdAt      DateTime          @default(now())
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  product        InventoryProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+  booking        Booking?         @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  createdBy      User             @relation("StockMovementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, branchId, createdAt])
+  @@index([productId, createdAt])
+  @@index([transferGroupId])
+  @@map("stock_movements")
+}
+
+model WarrantyClaim {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @db.Uuid
+  branchId       String?             @db.Uuid
+  assetId        String              @db.Uuid
+  productId      String?             @db.Uuid
+  supplierId     String?             @db.Uuid
+  status         WarrantyClaimStatus @default(DRAFT)
+  claimNumber    String              @db.VarChar(50)
+  issue          String              @db.VarChar(1000)
+  resolution     String?             @db.Text
+  submittedAt    DateTime?
+  resolvedAt     DateTime?
+  createdById    String              @db.Uuid
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  asset          Asset              @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  product        InventoryProduct?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  supplier       Supplier?          @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, claimNumber])
+  @@index([organizationId, branchId, status, createdAt])
+  @@index([assetId, createdAt])
+  @@map("warranty_claims")
 }

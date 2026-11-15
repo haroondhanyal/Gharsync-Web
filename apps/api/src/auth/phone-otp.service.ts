@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, HttpException, HttpStatus, Inje
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { DeliveryService } from "./delivery.service.js";
+import { authSecret } from "./auth-secrets.js";
 
 @Injectable()
 export class PhoneOtpService {
@@ -13,7 +14,7 @@ export class PhoneOtpService {
   ) {}
 
   private digest(userId: string, code: string) {
-    const secret = this.config.get<string>("OTP_HMAC_SECRET");
+    const secret = authSecret(this.config, "OTP_HMAC_SECRET");
     if (!secret || Buffer.byteLength(secret) < 32) throw new Error("OTP_HMAC_SECRET must contain at least 32 bytes.");
     return createHmac("sha256", secret).update(`${userId}:${code}`).digest("hex");
   }
@@ -29,7 +30,9 @@ export class PhoneOtpService {
     const sent = await this.prisma.otpChallenge.count({ where: { userId, createdAt: { gte: since } } });
     if (sent >= 3) throw new HttpException("Too many verification codes requested. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
 
-    const code = String(randomInt(100_000, 1_000_000));
+    const code = this.config.get<string>("NODE_ENV") === "development" && this.config.get<string>("LOCAL_DEV_DELIVERY") !== "false"
+      ? "123456"
+      : String(randomInt(100_000, 1_000_000));
     const challenge = await this.prisma.otpChallenge.create({
       data: { userId, phone: user.phone, codeHash: this.digest(userId, code), expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
     });

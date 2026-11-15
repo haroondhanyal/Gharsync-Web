@@ -4,6 +4,7 @@ import { JwtService } from "@nestjs/jwt";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { authSecret } from "./auth-secrets.js";
 import { ALLOW_UNVERIFIED, IS_PUBLIC, type AuthContext } from "./auth-context.js";
 
 interface TokenClaims {
@@ -42,7 +43,7 @@ export class JwtAuthGuard implements CanActivate {
     let claims: TokenClaims;
     try {
       claims = await this.jwt.verifyAsync<TokenClaims>(token, {
-        secret: this.config.getOrThrow<string>("JWT_ACCESS_SECRET"),
+        secret: authSecret(this.config, "JWT_ACCESS_SECRET"),
         issuer: "gharsync-api",
         audience: "gharsync-web",
       });
