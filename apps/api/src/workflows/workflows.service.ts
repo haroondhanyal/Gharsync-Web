@@ -5,6 +5,7 @@ import { BookingStatus, InvoiceStatus, OrganizationRole, PaymentStatus, QuoteSta
 import type { z } from "zod";
 import type { bookingCreateSchema, bookingTransitionSchema, invoiceCreateSchema, paymentCreateSchema, paymentDecisionSchema, quoteCreateSchema, quoteDecisionSchema, serviceCreateSchema, serviceUpdateSchema, refundCreateSchema } from "@gharsync/validation";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { EntitlementsService } from "../platform/entitlements.service.js";
 import type { AuthContext } from "../auth/auth-context.js";
 import { calculateQuoteTotals, canTransitionBooking, invoiceOutstanding, invoiceStatusFromLedger } from "./workflow-rules.js";
 
@@ -26,7 +27,13 @@ const bookingSelect = {
 
 @Injectable()
 export class WorkflowsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly entitlements: EntitlementsService) {}
+
+  private async notifyTeam(organizationId: string, branchId: string | null, eventKey: string, subject: string, body: string) {
+    const members = await this.prisma.organizationMember.findMany({ where: { organizationId, status: "ACTIVE", ...(branchId ? { OR: [{ branchId }, { branchId: null }] } : {}) }, select: { userId: true } });
+    if (!members.length) return;
+    await this.prisma.notificationLog.createMany({ data: members.map(({ userId }) => ({ organizationId, userId, eventKey, channel: "IN_APP" as const, status: "SENT" as const, subject, body })) });
+  }
 
   private scope(auth: AuthContext) {
     if (!auth.organizationId) throw new ForbiddenException("Select an organization first.");
@@ -35,14 +42,14 @@ export class WorkflowsService {
 
   async listServices(auth: AuthContext, includeInactive = false) {
     const branchFilter = auth.branchId ? { OR: [{ branchLinks: { none: {} } }, { branchLinks: { some: { branchId: auth.branchId } } }] } : {};
-    return this.prisma.service.findMany({ where: { organizationId: auth.organizationId!, deletedAt: null, ...(includeInactive ? {} : { isActive: true }), ...branchFilter }, orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, name: true, category: true, description: true, basePrice: true, minPrice: true, maxPrice: true, durationMins: true, requiredSkills: true, isActive: true, branchLinks: { select: { branchId: true, branch: { select: { name: true } } } }, createdAt: true } });
+    return this.prisma.service.findMany({ where: { organizationId: auth.organizationId!, deletedAt: null, ...(includeInactive ? {} : { isActive: true }), ...branchFilter }, orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, name: true, category: true, description: true, basePrice: true, minPrice: true, maxPrice: true, durationMins: true, requiredSkills: true, serviceAreas: true, isActive: true, branchLinks: { select: { branchId: true, branch: { select: { name: true } } } }, createdAt: true } });
   }
 
   async createService(auth: AuthContext, input: z.infer<typeof serviceCreateSchema>) {
     const branchIds = await this.validateBranches(auth, input.branchIds);
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const service = await tx.service.create({ data: { organizationId: auth.organizationId!, name: input.name, category: input.category, description: input.description, basePrice: input.basePrice === undefined ? null : asMoney(input.basePrice), minPrice: input.minPrice === undefined ? null : asMoney(input.minPrice), maxPrice: input.maxPrice === undefined ? null : asMoney(input.maxPrice), durationMins: input.durationMins, requiredSkills: input.requiredSkills, isActive: input.isActive }, select: { id: true, name: true, category: true, basePrice: true, minPrice: true, maxPrice: true, durationMins: true, requiredSkills: true, isActive: true } });
+        const service = await tx.service.create({ data: { organizationId: auth.organizationId!, name: input.name, category: input.category, description: input.description, basePrice: input.basePrice === undefined ? null : asMoney(input.basePrice), minPrice: input.minPrice === undefined ? null : asMoney(input.minPrice), maxPrice: input.maxPrice === undefined ? null : asMoney(input.maxPrice), durationMins: input.durationMins, requiredSkills: input.requiredSkills, serviceAreas: input.serviceAreas, isActive: input.isActive }, select: { id: true, name: true, category: true, basePrice: true, minPrice: true, maxPrice: true, durationMins: true, requiredSkills: true, serviceAreas: true, isActive: true } });
         if (branchIds.length) await tx.serviceBranch.createMany({ data: branchIds.map((branchId) => ({ organizationId: auth.organizationId!, serviceId: service.id, branchId })) });
         await tx.auditLog.create({ data: { organizationId: auth.organizationId!, actorUserId: auth.userId, action: "service.created", resourceType: "service", resourceId: service.id } });
         return service;
@@ -74,8 +81,8 @@ export class WorkflowsService {
         const updated = await tx.service.update({ where: { id: serviceId }, data: {
           ...(input.name !== undefined ? { name: input.name } : {}), ...(input.category !== undefined ? { category: input.category } : {}), ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.basePrice !== undefined ? { basePrice: asMoney(input.basePrice) } : {}), ...(input.minPrice !== undefined ? { minPrice: asMoney(input.minPrice) } : {}), ...(input.maxPrice !== undefined ? { maxPrice: asMoney(input.maxPrice) } : {}),
-          ...(input.durationMins !== undefined ? { durationMins: input.durationMins } : {}), ...(input.requiredSkills !== undefined ? { requiredSkills: input.requiredSkills } : {}), ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-        }, select: { id: true, name: true, category: true, description: true, basePrice: true, minPrice: true, maxPrice: true, durationMins: true, requiredSkills: true, isActive: true } });
+          ...(input.durationMins !== undefined ? { durationMins: input.durationMins } : {}), ...(input.requiredSkills !== undefined ? { requiredSkills: input.requiredSkills } : {}), ...(input.serviceAreas !== undefined ? { serviceAreas: input.serviceAreas } : {}), ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        }, select: { id: true, name: true, category: true, description: true, basePrice: true, minPrice: true, maxPrice: true, durationMins: true, requiredSkills: true, serviceAreas: true, isActive: true } });
         if (branchIds !== undefined) {
           await tx.serviceBranch.deleteMany({ where: { serviceId, ...(auth.branchId ? { branchId: auth.branchId } : {}) } });
           if (branchIds.length) await tx.serviceBranch.createMany({ data: branchIds.map((branchId) => ({ organizationId: auth.organizationId!, serviceId, branchId })) });
@@ -112,6 +119,7 @@ export class WorkflowsService {
 
   async createBooking(auth: AuthContext, input: z.infer<typeof bookingCreateSchema>) {
     const organizationId = auth.organizationId!;
+    await this.entitlements.assertCapacity(organizationId, "monthlyJobs");
     const customer = await this.prisma.customer.findFirst({ where: { id: input.customerId, organizationId, deletedAt: null, isActive: true, ...(auth.branchId ? { branchId: auth.branchId } : {}) }, select: { id: true, branchId: true } });
     if (!customer) throw new NotFoundException("Customer not found in this organization.");
     const branchId = auth.branchId ?? input.branchId ?? customer.branchId;
@@ -147,6 +155,7 @@ export class WorkflowsService {
       await tx.auditLog.create({ data: { organizationId, actorUserId: auth.userId, action: "booking.created", resourceType: "booking", resourceId: created.id, metadata: { branchId, serviceId: input.serviceId } } });
       return created;
     });
+    await this.notifyTeam(organizationId, branchId ?? null, "booking.received", "New service request", `A new ${input.urgency.toLowerCase()} priority service request has been created.`);
     return this.getBooking(auth, booking.id);
   }
 
@@ -198,6 +207,9 @@ export class WorkflowsService {
       await tx.auditLog.create({ data: { organizationId: auth.organizationId!, actorUserId: auth.userId, action: "booking.status_changed", resourceType: "booking", resourceId: bookingId, metadata: { from: booking.status, to: next } } });
       return tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: bookingSelect });
     });
+    if (([BookingStatus.ASSIGNED, BookingStatus.SCHEDULED, BookingStatus.COMPLETED, BookingStatus.CANCELLED, BookingStatus.DISPUTED] as BookingStatus[]).includes(next)) {
+      await this.notifyTeam(auth.organizationId!, booking.branchId, `booking.${next.toLowerCase()}`, `Booking ${next.replaceAll("_", " ").toLowerCase()}`, `Booking ${bookingId.slice(0, 8)} is now ${next.replaceAll("_", " ").toLowerCase()}.`);
+    }
     return updated;
   }
 

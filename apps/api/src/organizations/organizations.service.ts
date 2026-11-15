@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import type { AuthContext } from "../auth/auth-context.js";
 import { DeliveryService } from "../auth/delivery.service.js";
 import { ensureDefaultPermissions } from "../permissions/permission-catalog.js";
+import { EntitlementsService } from "../platform/entitlements.service.js";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const slugPart = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 72) || "business";
@@ -17,6 +18,7 @@ export class OrganizationsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly delivery: DeliveryService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   async create(userId: string, input: { name: string; businessType: string; city: string; address?: string }) {
@@ -28,6 +30,8 @@ export class OrganizationsService {
           branches: { create: { name: "Main branch", city: input.city, address: input.address, isDefault: true } },
         }, select: { id: true, name: true, slug: true, currency: true, timezone: true, createdAt: true },
       });
+      const freePlan = await tx.subscriptionPlan.findUnique({ where: { key: "FREE" } });
+      if (freePlan) await tx.subscription.create({ data: { organizationId: organization.id, planId: freePlan.id, status: "TRIAL", periodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) } });
       await tx.organizationMember.create({ data: { organizationId: organization.id, userId, role: OrganizationRole.OWNER, status: "ACTIVE", joinedAt: new Date() } });
       await ensureDefaultPermissions(tx);
       await tx.auditLog.create({ data: { actorUserId: userId, organizationId: organization.id, action: "organization.created", resourceType: "organization", resourceId: organization.id } });
@@ -45,6 +49,7 @@ export class OrganizationsService {
 
   async createBranch(auth: AuthContext, input: { name: string; city: string; address?: string; phone?: string }) {
     if (!auth.organizationId) throw new ForbiddenException();
+    await this.entitlements.assertCapacity(auth.organizationId, "branches");
     return this.prisma.branch.create({
       data: { organizationId: auth.organizationId, name: input.name, city: input.city, address: input.address, phone: input.phone },
       select: { id: true, name: true, city: true, address: true, phone: true, isDefault: true },
@@ -112,6 +117,7 @@ export class OrganizationsService {
 
   async createInvite(auth: AuthContext, organizationId: string, input: { email: string; role: OrganizationRole; branchId?: string }) {
     this.requireActiveOrganization(auth, organizationId);
+    await this.entitlements.assertCapacity(organizationId, "staff");
     if (!inviteRoles.has(input.role)) throw new BadRequestException("This role cannot be assigned by invitation.");
     if (input.role === OrganizationRole.ADMIN && auth.role !== OrganizationRole.OWNER) throw new ForbiddenException("Only an owner can invite an administrator.");
     if (auth.branchId && input.branchId !== auth.branchId) throw new ForbiddenException("You can invite staff only to your assigned branch.");

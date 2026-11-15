@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench, CalendarClock, Boxes, ShieldCheck } from "lucide-react";
+import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench, CalendarClock, Boxes, ShieldCheck, Bell, Bot, CreditCard, Command } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -18,6 +18,10 @@ const navigation = [
   { href: "/inventory", label: "Inventory", icon: Boxes },
   { href: "/warranty", label: "Warranty", icon: ShieldCheck },
   { href: "/team", label: "Team & branches", icon: UsersRound },
+  { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/assistant", label: "AI assistant", icon: Bot },
+  { href: "/billing", label: "Plans & billing", icon: CreditCard },
+  { href: "/platform", label: "Platform admin", icon: Command },
 ];
 
 export function AppFrame({ user, organizationId, active, children }: { user: User; organizationId: string; active: string; children: React.ReactNode }) {
@@ -25,7 +29,9 @@ export function AppFrame({ user, organizationId, active, children }: { user: Use
   const selected = organizations.find((organization) => organization.id === organizationId);
   const role = user.memberships.find((membership) => membership.organization.id === organizationId)?.role;
   const canManageTeam = role === "OWNER" || role === "ADMIN";
-  const visibleNavigation = navigation.filter((item) => (item.href !== "/team" || canManageTeam) && (role !== "TECHNICIAN" || (item.href !== "/customers" && item.href !== "/invoices" && item.href !== "/inventory" && item.href !== "/warranty")));
+  const canManageBilling = ["OWNER", "ADMIN", "MANAGER"].includes(role ?? "");
+  const platformAdmins = (process.env.PLATFORM_ADMIN_EMAILS ?? "").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean);
+  const visibleNavigation = navigation.filter((item) => (item.href !== "/team" || canManageTeam) && (item.href !== "/assistant" || canManageBilling) && (item.href !== "/billing" || canManageBilling) && (item.href !== "/platform" || platformAdmins.includes(user.email.toLowerCase())) && (role !== "TECHNICIAN" || (item.href !== "/customers" && item.href !== "/invoices" && item.href !== "/inventory" && item.href !== "/warranty")));
   return <div className="business-app">
     <aside className="app-sidebar">
       <div className="sidebar-brand"><Brand light /><span className="business-label">BUSINESS</span></div>

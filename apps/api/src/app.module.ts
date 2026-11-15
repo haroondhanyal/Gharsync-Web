@@ -12,12 +12,14 @@ import { WorkflowsModule } from "./workflows/workflows.module.js";
 import { OrganizationsModule } from "./organizations/organizations.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { OperationsModule } from "./operations/operations.module.js";
+import { CommunicationsModule } from "./communications/communications.module.js";
+import { PlatformModule } from "./platform/platform.module.js";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env", ".env"] }),
     ThrottlerModule.forRoot([
-      { name: "default", ttl: 60_000, limit: 120 },
+      { name: "default", ttl: 60_000, limit: process.env.NODE_ENV === "development" ? 600 : 120 },
       { name: "auth", ttl: 60_000, limit: 8 },
     ]),
     PrismaModule,
@@ -28,6 +30,8 @@ import { OperationsModule } from "./operations/operations.module.js";
     HomesModule,
     WorkflowsModule,
     OperationsModule,
+    CommunicationsModule,
+    PlatformModule,
   ],
   controllers: [HealthController],
   providers: [

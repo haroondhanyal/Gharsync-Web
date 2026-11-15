@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Eye, EyeOff, ArrowRight, LoaderCircle } from "lucide-react";
 
 type AuthMode = "login" | "signup";
@@ -79,8 +80,8 @@ export function AuthForm({ mode, inviteToken, redirectTo }: { mode: AuthMode; in
     </>}
     <label>Email address<input name="email" type="email" autoComplete="email" placeholder="you@example.com" maxLength={320} required /></label>
     <label>Password<span className="password-wrap"><input name="password" type={showPassword ? "text" : "password"} autoComplete={isSignup ? "new-password" : "current-password"} placeholder={isSignup ? "At least 12 characters" : "Enter your password"} minLength={isSignup ? 12 : 1} maxLength={128} required /><button type="button" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}</button></span></label>
-    {!isSignup && <a className="forgot-link" href="/forgot-password">Forgot password?</a>}
-    {isSignup && <label className="consent"><input type="checkbox" required /><span>I agree to the <a href="#terms">Terms of Service</a> and <a href="#privacy">Privacy Policy</a>.</span></label>}
+    {!isSignup && <Link className="forgot-link" href="/forgot-password">Forgot password?</Link>}
+    {isSignup && <label className="consent"><input type="checkbox" required /><span>I agree to the <Link href="/terms">Terms of Service</Link> and <Link href="/privacy">Privacy Policy</Link>.</span></label>}
     <button className="button button-dark auth-submit" type="submit" disabled={busy}>{busy ? <>Please wait <LoaderCircle size={16} className="spin" /></> : <>{isSignup ? "Create your account" : "Log in to GharSync"}<ArrowRight size={16}/></>}</button>
     {message && <p className="form-message" role="alert">{message}</p>}
     {isSignup && <p className="auth-form-footnote">Phone verification uses an SMS provider configured by your platform administrator.</p>}

@@ -1,0 +1,7 @@
+import { AppFrame } from "@/components/app-frame";
+import { BillingPanel } from "@/components/billing-panel";
+import { serverApi } from "@/lib/server-api";
+type Me = { fullName: string; email: string; currentOrganizationId: string; memberships: { role: string; organization: { id: string; name: string } }[] };
+type Plan = { id: string; key: string; name: string; description: string; monthlyPrice: string; annualPrice: string; currency: string; maxBranches: number | null; maxStaff: number | null; maxMonthlyJobs: number | null; features: string[] };
+type Billing = { subscription: { id: string; status: string; interval: string; periodEnd: string; trialEndsAt: string | null; plan: Plan } | null; jobsThisMonth: number; billingProvider: string; paymentsEnabled: boolean };
+export default async function BillingPage() { const user = await serverApi<Me>("/auth/me"); const [plans, billing] = await Promise.all([serverApi<Plan[]>("/billing/plans"), serverApi<Billing>("/billing/subscription")]); const role = user.memberships.find((item) => item.organization.id === user.currentOrganizationId)?.role; return <AppFrame user={user} organizationId={user.currentOrganizationId} active="/billing"><div className="page-heading"><div><div className="eyebrow">PHASE 9 · SUBSCRIPTION</div><h1>Plans & billing</h1><p>Compare workspace limits and request a plan change. Payments stay disabled until a verified provider is connected.</p></div></div><BillingPanel plans={plans} billing={billing} canManage={role === "OWNER" || role === "ADMIN"}/></AppFrame>; }

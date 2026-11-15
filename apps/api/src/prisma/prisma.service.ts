@@ -8,7 +8,7 @@ import { mkdirSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureDefaultPermissions } from "../permissions/permission-catalog.js";
+import { ensureDefaultPermissions, ensurePlatformCatalog } from "../permissions/permission-catalog.js";
 
 const logger = new Logger("Database");
 const embeddedMode = process.env.DATABASE_MODE === "embedded" || (!process.env.DATABASE_MODE && process.env.NODE_ENV === "development");
@@ -25,7 +25,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     if (embeddedDb) await embeddedDb.waitReady;
     await this.$connect();
     if (embeddedDb) await this.applyEmbeddedMigrations();
-    await this.$transaction((tx) => ensureDefaultPermissions(tx));
+    await this.$transaction(async (tx) => {
+      await ensureDefaultPermissions(tx);
+      await ensurePlatformCatalog(tx);
+    });
   }
 
   private async applyEmbeddedMigrations() {

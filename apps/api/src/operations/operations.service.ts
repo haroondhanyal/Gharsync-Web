@@ -87,14 +87,14 @@ export class OperationsService {
   }
 
   async products(auth: AuthContext) {
-    const products = await this.prisma.inventoryProduct.findMany({ where: { organizationId: this.org(auth), isActive: true }, orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, sku: true, name: true, category: true, description: true, unit: true, unitCost: true, reorderLevel: true, tracksWarranty: true, warrantyDays: true, supplier: { select: { id: true, name: true } }, stocks: { where: this.branchWhere(auth), select: { id: true, branchId: true, quantity: true, reserved: true, branch: { select: { name: true } } } } } });
+    const products = await this.prisma.inventoryProduct.findMany({ where: { organizationId: this.org(auth), isActive: true }, orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, sku: true, barcode: true, name: true, category: true, manufacturer: true, compatibleModels: true, description: true, unit: true, unitCost: true, sellingPrice: true, reorderLevel: true, tracksWarranty: true, warrantyDays: true, supplier: { select: { id: true, name: true } }, stocks: { where: this.branchWhere(auth), select: { id: true, branchId: true, quantity: true, reserved: true, branch: { select: { name: true } } } } } });
     return products.map((product) => ({ ...product, stocks: product.stocks.map((stock) => ({ ...stock, available: money(stock.quantity).sub(stock.reserved) })), lowStock: product.stocks.length ? product.stocks.every((stock) => money(stock.quantity).sub(stock.reserved).lte(product.reorderLevel)) : money(product.reorderLevel).gt(0) }));
   }
 
   async createProduct(auth: AuthContext, input: z.infer<typeof inventoryProductCreateSchema>) {
     const organizationId = this.org(auth);
     if (input.supplierId && !(await this.prisma.supplier.findFirst({ where: { id: input.supplierId, organizationId }, select: { id: true } }))) throw new BadRequestException("Supplier must belong to the active organization.");
-    const product = await this.prisma.inventoryProduct.create({ data: { organizationId, ...input, unitCost: money(input.unitCost), reorderLevel: money(input.reorderLevel) }, select: { id: true, sku: true, name: true, category: true, unit: true, unitCost: true, reorderLevel: true, tracksWarranty: true, warrantyDays: true } });
+    const product = await this.prisma.inventoryProduct.create({ data: { organizationId, ...input, unitCost: money(input.unitCost), sellingPrice: input.sellingPrice === undefined ? null : money(input.sellingPrice), reorderLevel: money(input.reorderLevel) }, select: { id: true, sku: true, barcode: true, name: true, category: true, manufacturer: true, compatibleModels: true, unit: true, unitCost: true, sellingPrice: true, reorderLevel: true, tracksWarranty: true, warrantyDays: true } });
     await this.audit(auth, "inventory.product.created", "inventory_product", product.id);
     return product;
   }

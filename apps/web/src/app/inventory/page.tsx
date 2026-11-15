@@ -5,7 +5,7 @@ import { serverApi } from "@/lib/server-api";
 type Me = { fullName: string; email: string; currentOrganizationId: string; memberships: { role: string; branchId: string | null; organization: { id: string; name: string } }[] };
 type Branch = { id: string; name: string };
 type Supplier = { id: string; name: string; phone?: string | null; email?: string | null };
-type Product = { id: string; sku: string; name: string; category: string; unit: string; unitCost: string; reorderLevel: string; tracksWarranty: boolean; supplier: { id: string; name: string } | null; stocks: { branchId: string; branch: { name: string }; quantity: string; reserved: string; available: string }[]; lowStock: boolean };
+type Product = { id: string; sku: string; barcode: string | null; name: string; category: string; manufacturer: string | null; compatibleModels: string[]; description: string | null; unit: string; unitCost: string; sellingPrice: string | null; reorderLevel: string; tracksWarranty: boolean; warrantyDays: number | null; supplier: { id: string; name: string } | null; stocks: { branchId: string; branch: { name: string }; quantity: string; reserved: string; available: string }[]; lowStock: boolean };
 
 export default async function InventoryPage() {
   const user = await serverApi<Me>("/auth/me");

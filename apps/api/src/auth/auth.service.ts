@@ -116,6 +116,8 @@ export class AuthService {
             },
             select: { id: true },
           });
+          const freePlan = await tx.subscriptionPlan.findUnique({ where: { key: "FREE" } });
+          if (freePlan) await tx.subscription.create({ data: { organizationId: organization.id, planId: freePlan.id, status: "TRIAL", periodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) } });
           const owner = await tx.organizationMember.create({
             data: { organizationId: organization.id, userId: user.id, role: OrganizationRole.OWNER, status: "ACTIVE", joinedAt: new Date() },
             select: { branchId: true },
@@ -316,6 +318,8 @@ export class AuthService {
           branches: { create: { name: "Main branch", city: input.city, address: input.address, isDefault: true } },
         }, select: { id: true, name: true, slug: true, currency: true, timezone: true },
       });
+      const freePlan = await tx.subscriptionPlan.findUnique({ where: { key: "FREE" } });
+      if (freePlan) await tx.subscription.create({ data: { organizationId: organization.id, planId: freePlan.id, status: "TRIAL", periodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) } });
       await tx.organizationMember.create({ data: { organizationId: organization.id, userId, role: OrganizationRole.OWNER, status: "ACTIVE", joinedAt: new Date() } });
       await ensureDefaultPermissions(tx);
       await tx.auditLog.create({ data: { actorUserId: userId, organizationId: organization.id, action: "organization.created", resourceType: "organization", resourceId: organization.id } });
