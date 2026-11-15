@@ -15,7 +15,7 @@ function errorMessage(body: unknown) {
   return "Something went wrong. Please try again.";
 }
 
-export function AuthForm({ mode, inviteToken }: { mode: AuthMode; inviteToken?: string }) {
+export function AuthForm({ mode, inviteToken, redirectTo }: { mode: AuthMode; inviteToken?: string; redirectTo?: string }) {
   const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const accountType: AccountType = inviteToken ? "team" : "business";
@@ -51,11 +51,11 @@ export function AuthForm({ mode, inviteToken }: { mode: AuthMode; inviteToken?: 
       if (isSignup && inviteToken) {
         router.push(`/verify-phone?token=${encodeURIComponent(inviteToken)}`);
       } else if (result.phoneVerificationRequired) {
-        router.push("/verify-phone");
+        router.push(redirectTo ? `/verify-phone?next=${encodeURIComponent(redirectTo)}` : "/verify-phone");
       } else if (result.user?.memberships?.length === 0) {
         router.push("/onboarding");
       } else {
-        window.location.assign("/dashboard");
+        window.location.assign(redirectTo ?? "/dashboard");
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "GharSync could not reach the API. Please try again.");

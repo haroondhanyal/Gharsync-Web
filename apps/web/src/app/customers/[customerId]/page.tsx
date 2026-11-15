@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowUpRight, CalendarDays, Clock3, MapPin, Pencil, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Building2, CalendarDays, Clock3, MapPin, Pencil, Phone, Plus, UserRound } from "lucide-react";
 import { AppFrame } from "@/components/app-frame";
 import { ArchiveCustomerButton } from "@/components/archive-customer-button";
 import { serverApi } from "@/lib/server-api";
@@ -10,10 +10,11 @@ type Customer = {
   addresses: { id: string; label: string | null; address: string; city: string; isDefault: boolean }[];
   bookings: { id: string; status: string; description: string | null; createdAt: string; scheduledAt: string | null; service: { name: string } | null; branch: { name: string } | null }[];
 };
+type Property = { id: string; name: string; propertyType: string; address: string; city: string; _count: { assets: number } };
 
 export default async function CustomerProfilePage({ params }: { params: Promise<{ customerId: string }> }) {
   const { customerId } = await params;
-  const [user, customer] = await Promise.all([serverApi<Me>("/auth/me"), serverApi<Customer>(`/customers/${customerId}`)]);
+  const [user, customer, properties] = await Promise.all([serverApi<Me>("/auth/me"), serverApi<Customer>(`/customers/${customerId}`), serverApi<Property[]>(`/properties?customerId=${customerId}`)]);
   const canManage = ["OWNER", "ADMIN", "MANAGER"].includes(user.memberships.find((item) => item.organization.id === user.currentOrganizationId)?.role ?? "");
   const canArchive = ["OWNER", "ADMIN"].includes(user.memberships.find((item) => item.organization.id === user.currentOrganizationId)?.role ?? "");
   return <AppFrame user={user} organizationId={user.currentOrganizationId} active="/customers">
@@ -23,5 +24,6 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
       <section className="panel profile-info"><div className="panel-heading"><div><span className="panel-kicker">CUSTOMER DETAILS</span><h2>About</h2></div></div><div className="profile-info-row"><MapPin size={16}/><span><b>Home address</b>{customer.addresses.length ? customer.addresses.map((address) => <small key={address.id}>{address.address}, {address.city}{address.isDefault ? " · Primary" : ""}</small>) : <small>No address added</small>}</span></div><div className="profile-info-row"><CalendarDays size={16}/><span><b>Customer since</b><small>{new Intl.DateTimeFormat("en-PK", { day: "numeric", month: "long", year: "numeric" }).format(new Date(customer.createdAt))}</small></span></div>{customer.tags.length > 0 && <div className="tag-list">{customer.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}{customer.notes && <div className="profile-notes"><b>Team notes</b><p>{customer.notes}</p></div>}</section>
       <section className="panel history-panel"><div className="panel-heading"><div><span className="panel-kicker">SERVICE RELATIONSHIP</span><h2>Service history</h2></div><span className="history-total">{customer.bookings.length}{customer.bookings.length === 20 ? "+" : ""} visits</span></div>{customer.bookings.length ? <div className="service-history">{customer.bookings.map((booking) => <article className="history-item" key={booking.id}><span className="history-icon"><Clock3 size={15}/></span><div className="history-copy"><b>{booking.service?.name ?? "Home service"}</b><small>{booking.description || `Booking ${booking.status.toLowerCase().replaceAll("_", " ")}`}</small><small>{booking.branch?.name ?? "Organization booking"}</small></div><time>{new Intl.DateTimeFormat("en-PK", { day: "numeric", month: "short", year: "numeric" }).format(new Date(booking.createdAt))}</time></article>)}</div> : <div className="empty-state compact"><span className="empty-state-icon"><Clock3 size={18}/></span><b>No service history yet</b><p>Bookings linked to this customer will appear here.</p></div>}<div className="history-note"><ArrowUpRight size={14}/> History reflects bookings saved by your service team.</div></section>
     </div>
+    <section className="panel customer-properties"><div className="panel-heading"><div><span className="panel-kicker">HOME PASSPORT</span><h2>Properties & assets</h2></div>{canManage && <Link className="button button-outline button-small" href={`/properties/new?customerId=${customer.id}`}><Plus size={14}/> Add property</Link>}</div>{properties.length ? <div className="customer-property-list">{properties.map((property) => <Link className="customer-property-row" href={`/properties/${property.id}`} key={property.id}><span className="customer-property-icon"><Building2 size={16}/></span><span><b>{property.name}</b><small>{property.address}, {property.city}</small></span><span className="history-total">{property._count.assets} assets</span></Link>)}</div> : <div className="empty-state compact"><span className="empty-state-icon"><Building2 size={18}/></span><b>No property passports yet</b><p>Add this customer's home and appliances to keep a shared service history.</p></div>}</section>
   </AppFrame>;
 }

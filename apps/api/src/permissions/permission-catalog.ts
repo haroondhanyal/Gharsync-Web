@@ -9,14 +9,29 @@ export const PERMISSIONS = [
   { key: "customers.delete", description: "Archive customers" },
   { key: "members.manage", description: "Invite and manage organization members" },
   { key: "organization.manage", description: "Manage organization settings and branches" },
+  { key: "properties.read", description: "View customer properties" },
+  { key: "properties.manage", description: "Create and update customer properties and assets" },
+  { key: "documents.manage", description: "Upload and remove organization documents" },
+  { key: "services.read", description: "View the service catalog" },
+  { key: "services.manage", description: "Manage the service catalog" },
+  { key: "bookings.read", description: "View service bookings and timelines" },
+  { key: "bookings.create", description: "Create service bookings" },
+  { key: "bookings.manage", description: "Manage booking workflow and assignments" },
+  { key: "bookings.self_update", description: "Update the status of assigned technician jobs" },
+  { key: "quotes.manage", description: "Prepare and manage quotations" },
+  { key: "invoices.read", description: "View invoices and payment records" },
+  { key: "invoices.manage", description: "Issue and void invoices" },
+  { key: "payments.record", description: "Record customer payments for verification" },
+  { key: "payments.verify", description: "Verify or reject recorded payments" },
+  { key: "payments.refund", description: "Record refunds for verified payments" },
 ] as const;
 
 export const ROLE_PERMISSION_KEYS: Record<OrganizationRole, string[]> = {
   OWNER: PERMISSIONS.map(({ key }) => key),
   ADMIN: PERMISSIONS.map(({ key }) => key),
-  MANAGER: ["dashboard.read", "customers.read", "customers.create", "customers.update"],
-  STAFF: ["dashboard.read", "customers.read"],
-  TECHNICIAN: ["dashboard.read"],
+  MANAGER: ["dashboard.read", "customers.read", "customers.create", "customers.update", "properties.read", "properties.manage", "documents.manage", "services.read", "services.manage", "bookings.read", "bookings.create", "bookings.manage", "quotes.manage", "invoices.read", "invoices.manage", "payments.record", "payments.verify", "payments.refund"],
+  STAFF: ["dashboard.read", "customers.read", "customers.create", "properties.read", "properties.manage", "documents.manage", "services.read", "bookings.read", "bookings.create", "bookings.manage", "quotes.manage", "invoices.read", "invoices.manage", "payments.record"],
+  TECHNICIAN: ["dashboard.read", "customers.read", "properties.read", "documents.manage", "services.read", "bookings.read", "bookings.self_update"],
 };
 
 export async function ensureDefaultPermissions(tx: Prisma.TransactionClient) {

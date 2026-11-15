@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "../generated/prisma/client.js";
 import { BookingStatus } from "../generated/prisma/enums.js";
+import { InvoiceStatus, PaymentStatus } from "../generated/prisma/enums.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { AuthContext } from "../auth/auth-context.js";
 
@@ -35,7 +36,7 @@ export class DashboardService {
     const monthStart = startOfDayInZone(new Date(Date.UTC(Number(localNow.year), Number(localNow.month) - 1, 1, 12)), organization.timezone);
     const [
       totalCustomers, newCustomersThisMonth, todaysBookings, bookingCounts, recentCustomers, recentBookings,
-      repeatedCustomers,
+      repeatedCustomers, invoices, monthPayments, monthRefunds,
     ] = await Promise.all([
       this.prisma.customer.count({ where: customerScope }),
       this.prisma.customer.count({ where: { ...customerScope, createdAt: { gte: monthStart } } }),
@@ -62,11 +63,23 @@ export class DashboardService {
           HAVING COUNT(*) > 1
         ) repeated
       `),
+      this.prisma.invoice.findMany({
+        where: { organizationId, status: { not: InvoiceStatus.VOID }, ...(auth.branchId ? { branchId: auth.branchId } : {}) },
+        select: { total: true, payments: { where: { status: PaymentStatus.VERIFIED }, select: { amount: true, refunds: { select: { amount: true } } } } },
+      }),
+      this.prisma.payment.aggregate({ where: { organizationId, status: PaymentStatus.VERIFIED, verifiedAt: { gte: monthStart }, ...(auth.branchId ? { branchId: auth.branchId } : {}) }, _sum: { amount: true } }),
+      this.prisma.refund.aggregate({ where: { organizationId, createdAt: { gte: monthStart }, ...(auth.branchId ? { branchId: auth.branchId } : {}) }, _sum: { amount: true } }),
     ]);
     const counts = Object.fromEntries(bookingCounts.map((row) => [row.status, row._count._all])) as Partial<Record<BookingStatus, number>>;
     const pendingStatuses: BookingStatus[] = ["REQUESTED", "UNDER_REVIEW", "QUOTED", "AWAITING_APPROVAL", "APPROVED", "SCHEDULED", "ASSIGNED"];
     const inProgressStatuses: BookingStatus[] = ["TECHNICIAN_EN_ROUTE", "IN_PROGRESS"];
     const total = bookingCounts.reduce((sum, row) => sum + row._count._all, 0);
+    const outstandingBalance = invoices.reduce((sum, invoice) => {
+      const collected = invoice.payments.reduce((paid, payment) => paid.add(payment.amount).sub(payment.refunds.reduce((amount, refund) => amount.add(refund.amount), new Prisma.Decimal(0))), new Prisma.Decimal(0));
+      const outstanding = new Prisma.Decimal(invoice.total).sub(collected);
+      return sum.add(outstanding.gt(0) ? outstanding : 0);
+    }, new Prisma.Decimal(0));
+    const monthlyRevenue = new Prisma.Decimal(monthPayments._sum.amount ?? 0).sub(monthRefunds._sum.amount ?? 0);
     const pendingBookings = pendingStatuses.reduce((sum, status) => sum + (counts[status] ?? 0), 0);
     const inProgressBookings = inProgressStatuses.reduce((sum, status) => sum + (counts[status] ?? 0), 0);
     return {
@@ -84,8 +97,8 @@ export class DashboardService {
         cancelledBookings: counts.CANCELLED ?? 0,
         disputedBookings: counts.DISPUTED ?? 0,
         todaysBookings,
-        revenue: null,
-        outstandingBalance: null,
+        revenue: Number(monthlyRevenue.toFixed(2)),
+        outstandingBalance: Number(outstandingBalance.toFixed(2)),
         technicianPerformance: null,
         customerSatisfaction: null,
         warrantyCases: null,
@@ -94,7 +107,7 @@ export class DashboardService {
       bookingStatusCounts: bookingCounts.map(({ status, _count }) => ({ status, count: _count._all })),
       recentCustomers,
       recentBookings,
-      unavailableMetrics: ["revenue", "outstandingBalance", "technicianPerformance", "customerSatisfaction", "warrantyCases", "inventoryAlerts"],
+      unavailableMetrics: ["technicianPerformance", "customerSatisfaction", "warrantyCases", "inventoryAlerts"],
     };
   }
 }

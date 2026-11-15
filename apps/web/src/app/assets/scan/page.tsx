@@ -1,0 +1,8 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { AppFrame } from "@/components/app-frame";
+import { serverApi } from "@/lib/server-api";
+
+type Me = { fullName: string; email: string; currentOrganizationId: string; memberships: { role: string; organization: { id: string; name: string } }[] };
+type Asset = { id: string; category: string; brand: string | null; model: string | null; property: { id: string; name: string; city: string; customer: { fullName: string } }; bookings: { id: string; status: string; createdAt: string; service: { name: string } | null }[]; documents: { id: string; fileName: string; mimeType: string; sizeBytes: number; createdAt: string }[] };
+export default async function ScanAssetPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) { const code = (await searchParams).code; if (!code || !/^[0-9a-f-]{36}$/i.test(code)) redirect("/properties"); const safeReturn = `/assets/scan?code=${encodeURIComponent(code)}`; const [user, asset] = await Promise.all([serverApi<Me>("/auth/me", {}, `/login?next=${encodeURIComponent(safeReturn)}`), serverApi<Asset>(`/assets/qr/${encodeURIComponent(code)}`, {}, `/login?next=${encodeURIComponent(safeReturn)}`)]); return <AppFrame user={user} organizationId={user.currentOrganizationId} active="/properties"><div className="scan-success"><span className="profile-avatar">✓</span><div className="eyebrow">GHARSYNC HOME PASSPORT</div><h1>{asset.brand ? `${asset.brand} ` : ""}{asset.category}</h1><p>{asset.model ?? "Registered home equipment"} · {asset.property.name}, {asset.property.city}</p><Link className="button button-dark" href={`/assets/${asset.id}`}>Open asset & service history</Link></div></AppFrame>; }

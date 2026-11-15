@@ -7,6 +7,8 @@ import { CustomersModule } from "./customers/customers.module.js";
 import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { JwtAuthGuard } from "./auth/jwt-auth.guard.js";
 import { HealthController } from "./health/health.controller.js";
+import { HomesModule } from "./homes/homes.module.js";
+import { WorkflowsModule } from "./workflows/workflows.module.js";
 import { OrganizationsModule } from "./organizations/organizations.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 
@@ -22,6 +24,8 @@ import { PrismaModule } from "./prisma/prisma.module.js";
     OrganizationsModule,
     CustomersModule,
     DashboardModule,
+    HomesModule,
+    WorkflowsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -43,6 +43,37 @@ enum PropertyType {
   OTHER
 }
 
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  SUPERSEDED
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum PaymentStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CARD
+  DIGITAL_WALLET
+  OTHER
+}
+
 model User {
   id           String                 @id @default(uuid()) @db.Uuid
   email        String                 @unique @db.VarChar(320)
@@ -61,6 +92,12 @@ model User {
   auditLogs     AuditLog[]
   createdInvites OrganizationInvite[] @relation("InviteCreator")
   acceptedInvites OrganizationInvite[] @relation("InviteAccepter")
+  uploadedDocuments Document[] @relation("DocumentUploader")
+  createdQuotes Quote[] @relation("QuoteCreator")
+  createdInvoices Invoice[] @relation("InvoiceCreator")
+  recordedPayments Payment[] @relation("PaymentRecorder")
+  verifiedPayments Payment[] @relation("PaymentVerifier")
+  processedRefunds Refund[]
 
   @@index([phone])
   @@map("users")
@@ -87,6 +124,12 @@ model Organization {
   sessions    RefreshSession[]
   auditLogs   AuditLog[]
   invites     OrganizationInvite[]
+  documents   Document[]
+  serviceLinks ServiceBranch[]
+  quotes      Quote[]
+  invoices    Invoice[]
+  payments    Payment[]
+  refunds     Refund[]
 
   @@index([deletedAt])
   @@map("organizations")
@@ -104,6 +147,7 @@ model OrganizationMember {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   branchId       String?          @db.Uuid
   branch         Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  assignedBookings Booking[]      @relation("BookingAssignee")
 
   @@unique([organizationId, userId])
   @@index([organizationId, role, status])
@@ -127,6 +171,12 @@ model Branch {
   bookings       Booking[]
   customers      Customer[]
   invites        OrganizationInvite[]
+  serviceLinks   ServiceBranch[]
+  documents      Document[]
+  quotes         Quote[]
+  invoices       Invoice[]
+  payments       Payment[]
+  refunds        Refund[]
 
   @@unique([organizationId, name])
   @@index([organizationId, city])
@@ -151,6 +201,7 @@ model Customer {
   addresses      CustomerAddress[]
   properties     Property[]
   bookings       Booking[]
+  documents      Document[]
 
   @@index([organizationId, phone])
   @@index([organizationId, fullName])
@@ -192,6 +243,9 @@ model Property {
   customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
   assets         Asset[]
   bookings       Booking[]
+  documents      Document[]
+  latitude       Decimal?     @db.Decimal(10, 7)
+  longitude      Decimal?     @db.Decimal(10, 7)
 
   @@index([organizationId, customerId])
   @@index([organizationId, city])
@@ -208,13 +262,18 @@ model Asset {
   serialNumber   String?      @db.VarChar(120)
   qrCode         String       @unique @default(uuid()) @db.VarChar(120)
   purchasedAt    DateTime?
+  installedAt    DateTime?
+  warrantyStartsAt DateTime?
   warrantyEndsAt DateTime?
+  purchasePrice  Decimal?     @db.Decimal(12, 2)
+  seller         String?      @db.VarChar(180)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   property       Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   bookings       Booking[]
+  documents      Document[]
 
   @@unique([organizationId, serialNumber])
   @@index([organizationId, category])
@@ -230,16 +289,35 @@ model Service {
   description    String?      @db.Text
   basePrice      Decimal?     @db.Decimal(12, 2)
   durationMins   Int?
+  minPrice       Decimal?     @db.Decimal(12, 2)
+  maxPrice       Decimal?     @db.Decimal(12, 2)
+  requiredSkills String[]     @default([])
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bookings       Booking[]
+  branchLinks    ServiceBranch[]
 
   @@unique([organizationId, name])
   @@index([organizationId, category, isActive])
   @@map("services")
+}
+
+model ServiceBranch {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  serviceId      String       @db.Uuid
+  branchId       String       @db.Uuid
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service        Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, branchId])
+  @@index([organizationId, branchId])
+  @@map("service_branches")
 }
 
 model Booking {
@@ -253,8 +331,12 @@ model Booking {
   status         BookingStatus @default(REQUESTED)
   urgency        String        @default("NORMAL") @db.VarChar(20)
   description    String?       @db.Text
+  internalNotes  String?       @db.Text
   preferredAt    DateTime?
   scheduledAt    DateTime?
+  latitude       Decimal?      @db.Decimal(10, 7)
+  longitude      Decimal?      @db.Decimal(10, 7)
+  assignedMemberId String?     @db.Uuid
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
@@ -264,12 +346,193 @@ model Booking {
   property       Property?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   asset          Asset?        @relation(fields: [assetId], references: [id], onDelete: SetNull)
   service        Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  assignedMember OrganizationMember? @relation("BookingAssignee", fields: [assignedMemberId], references: [id], onDelete: SetNull)
   events         BookingEvent[]
+  quotes         Quote[]
+  invoices       Invoice[]
+  documents      Document[]
 
   @@index([organizationId, status, createdAt])
   @@index([organizationId, branchId, scheduledAt])
   @@index([customerId, createdAt])
+  @@index([organizationId, assignedMemberId, scheduledAt])
   @@map("bookings")
+}
+
+model Document {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String?      @db.Uuid
+  uploaderId     String       @db.Uuid
+  customerId     String?      @db.Uuid
+  propertyId     String?      @db.Uuid
+  assetId        String?      @db.Uuid
+  bookingId      String?      @db.Uuid
+  fileName       String       @db.VarChar(255)
+  storageKey     String       @unique @db.VarChar(120)
+  mimeType       String       @db.VarChar(120)
+  sizeBytes      Int
+  checksum       String       @db.Char(64)
+  createdAt      DateTime     @default(now())
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  uploader       User         @relation("DocumentUploader", fields: [uploaderId], references: [id], onDelete: Restrict)
+  customer       Customer?    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  property       Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  asset          Asset?       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  booking        Booking?     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, branchId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([propertyId, createdAt])
+  @@index([assetId, createdAt])
+  @@index([bookingId, createdAt])
+  @@map("documents")
+}
+
+model Quote {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String?      @db.Uuid
+  bookingId      String       @db.Uuid
+  revision       Int
+  status         QuoteStatus  @default(DRAFT)
+  currency       String       @default("PKR") @db.Char(3)
+  subtotal       Decimal      @db.Decimal(12, 2)
+  discount       Decimal      @default(0) @db.Decimal(12, 2)
+  tax            Decimal      @default(0) @db.Decimal(12, 2)
+  total          Decimal      @db.Decimal(12, 2)
+  notes          String?      @db.Text
+  validUntil     DateTime?
+  createdById    String       @db.Uuid
+  acceptedAt     DateTime?
+  rejectedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  booking        Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  createdBy      User         @relation("QuoteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  items          QuoteItem[]
+  invoice        Invoice?
+
+  @@unique([bookingId, revision])
+  @@index([organizationId, branchId, status, createdAt])
+  @@map("quotes")
+}
+
+model QuoteItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  quoteId     String   @db.Uuid
+  description String   @db.VarChar(240)
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  lineTotal   Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@index([quoteId, sortOrder])
+  @@map("quote_items")
+}
+
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @db.Uuid
+  branchId       String?       @db.Uuid
+  bookingId      String        @db.Uuid
+  quoteId        String?       @unique @db.Uuid
+  invoiceNumber  String        @db.VarChar(40)
+  status         InvoiceStatus @default(ISSUED)
+  currency       String        @default("PKR") @db.Char(3)
+  subtotal       Decimal       @db.Decimal(12, 2)
+  discount       Decimal       @default(0) @db.Decimal(12, 2)
+  tax            Decimal       @default(0) @db.Decimal(12, 2)
+  total          Decimal       @db.Decimal(12, 2)
+  dueAt          DateTime?
+  createdById    String        @db.Uuid
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  voidedAt       DateTime?
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  booking        Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  quote          Quote?        @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  createdBy      User          @relation("InvoiceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  items          InvoiceItem[]
+  payments       Payment[]
+  refunds        Refund[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([bookingId, createdAt])
+  @@index([organizationId, branchId, status, createdAt])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoiceId   String   @db.Uuid
+  description String   @db.VarChar(240)
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  lineTotal   Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, sortOrder])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id                  String        @id @default(uuid()) @db.Uuid
+  organizationId      String        @db.Uuid
+  branchId            String?       @db.Uuid
+  invoiceId           String        @db.Uuid
+  amount              Decimal       @db.Decimal(12, 2)
+  currency            String        @default("PKR") @db.Char(3)
+  method              PaymentMethod
+  status              PaymentStatus @default(PENDING_VERIFICATION)
+  reference           String?       @db.VarChar(180)
+  idempotencyKey      String?       @db.VarChar(120)
+  recordedById        String        @db.Uuid
+  verifiedById        String?       @db.Uuid
+  verifiedAt          DateTime?
+  note                String?       @db.Text
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch              Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invoice             Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  recordedBy          User          @relation("PaymentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+  verifiedBy          User?         @relation("PaymentVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+  refunds             Refund[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, branchId, status, createdAt])
+  @@index([invoiceId, status])
+  @@map("payments")
+}
+
+model Refund {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  branchId       String?      @db.Uuid
+  paymentId      String       @db.Uuid
+  invoiceId      String       @db.Uuid
+  amount         Decimal      @db.Decimal(12, 2)
+  reference      String?      @db.VarChar(180)
+  reason         String       @db.VarChar(500)
+  processedById  String       @db.Uuid
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  payment        Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  processedBy    User         @relation(fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, branchId, createdAt])
+  @@index([invoiceId, createdAt])
+  @@map("refunds")
 }
 
 model BookingEvent {

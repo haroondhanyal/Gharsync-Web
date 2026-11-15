@@ -71,6 +71,7 @@ npm install
 npm run infra:up
 npm run db:generate
 npm run db:migrate
+npm run db:seed
 npm run dev:web
 ```
 
@@ -85,7 +86,7 @@ npm run dev:api
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 
-The checked-in Prisma migrations are applied when the local PostgreSQL database is available. The seed command adds the permission catalog only; no fake customer or booking records are inserted. API authentication requires three independent secrets in `.env`; generate them with `openssl rand -base64 48`. SMS verification requires a compatible SMS provider. Password recovery and email invitations require a configured email provider. Provider adapters expect a POST JSON endpoint using a Bearer key; adjust the adapter if your provider uses another contract.
+The checked-in Prisma migrations are applied when the local PostgreSQL database is available. Run the seed command to install/update the role permission catalog; it does not insert fake customer or booking records. Phase 4 adds customer properties, appliance/assets, service history, private QR entry and private document uploads. Phase 5 adds a branch-aware service catalog, booking assignment and status history, quote revisions/decisions, invoice PDF output, pending/verified payment receipts and auditable manual refunds. Customer quote decisions are recorded by staff; homeowner login/notifications and payment gateway settlement are future integrations. Local document files are stored under `var/documents` by default (or `DOCUMENT_STORAGE_PATH`) and need persistent storage and backups in deployment. API authentication requires three independent secrets in `.env`; generate them with `openssl rand -base64 48`. SMS verification requires a compatible SMS provider. Password recovery and email invitations require a configured email provider. Provider adapters expect a POST JSON endpoint using a Bearer key; adjust the adapter if your provider uses another contract.
 
 ### Useful commands
 

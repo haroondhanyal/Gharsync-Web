@@ -9,4 +9,5 @@ dist/
 npm-debug.log*
 .DS_Store
 coverage/
+var/documents/
 *.tsbuildinfo

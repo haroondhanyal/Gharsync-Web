@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ContactRound, UsersRound } from "lucide-react";
+import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -10,6 +10,10 @@ type User = { fullName: string; email: string; memberships: Membership[] };
 const navigation = [
   { href: "/dashboard", label: "Overview", icon: BarChart3 },
   { href: "/customers", label: "Customers", icon: ContactRound },
+  { href: "/properties", label: "Homes & assets", icon: Building2 },
+  { href: "/bookings", label: "Bookings", icon: ListTodo },
+  { href: "/services", label: "Services", icon: Wrench },
+  { href: "/invoices", label: "Invoices", icon: FileText },
   { href: "/team", label: "Team & branches", icon: UsersRound },
 ];
 
@@ -18,7 +22,7 @@ export function AppFrame({ user, organizationId, active, children }: { user: Use
   const selected = organizations.find((organization) => organization.id === organizationId);
   const role = user.memberships.find((membership) => membership.organization.id === organizationId)?.role;
   const canManageTeam = role === "OWNER" || role === "ADMIN";
-  const visibleNavigation = navigation.filter((item) => item.href !== "/team" || canManageTeam);
+  const visibleNavigation = navigation.filter((item) => (item.href !== "/team" || canManageTeam) && (role !== "TECHNICIAN" || (item.href !== "/customers" && item.href !== "/invoices")));
   return <div className="business-app">
     <aside className="app-sidebar">
       <div className="sidebar-brand"><Brand light /><span className="business-label">BUSINESS</span></div>
@@ -27,7 +31,7 @@ export function AppFrame({ user, organizationId, active, children }: { user: Use
         <span className="nav-section-title">WORKSPACE</span>
         {visibleNavigation.map(({ href, label, icon: Icon }) => <Link className={active === href ? "active" : ""} href={href} key={href}><Icon size={17} /><span>{label}</span></Link>)}
         <span className="nav-section-title nav-section-lower">MANAGE</span>
-        {canManageTeam && <Link className={active === "/settings/branches" ? "active" : ""} href="/settings/branches"><UsersRound size={17} /><span>Branches</span></Link>}
+        {canManageTeam && <Link className={active === "/settings/branches" ? "active" : ""} href="/settings/branches"><Settings2 size={17} /><span>Branches</span></Link>}
       </nav>
       <div className="sidebar-help"><span className="help-mark">?</span><span><b>Need a hand?</b><small>Your service team workspace</small></span></div>
       <div className="sidebar-user"><span className="user-avatar">{user.fullName.trim().slice(0, 1).toUpperCase()}</span><span className="user-info"><b>{user.fullName}</b><small>{user.email}</small></span><SignOutButton /></div>
