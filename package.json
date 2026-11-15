@@ -1,0 +1,20 @@
+{
+  "name": "gharsync-platform",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @gharsync/web",
+    "dev:api": "npm run start:dev --workspace @gharsync/api",
+    "build:web": "npm run build --workspace @gharsync/web",
+    "build:api": "npm run build --workspace @gharsync/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @gharsync/api",
+    "db:migrate": "npm run db:migrate --workspace @gharsync/api",
+    "db:seed": "npm run db:seed --workspace @gharsync/api",
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:down": "docker compose down"
+  },
+  "engines": { "node": "^22.22.3 || >=24.15.0" }
+}

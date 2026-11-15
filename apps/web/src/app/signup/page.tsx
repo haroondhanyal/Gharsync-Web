@@ -1,0 +1,9 @@
+import Link from "next/link";
+import { ArrowLeft, ArrowRight, Check, ShieldCheck, Sparkles } from "lucide-react";
+import { Brand } from "@/components/brand";
+import { AuthForm } from "@/components/auth-form";
+
+export default function SignupPage() {
+  return <main className="auth-layout"><section className="auth-form-side"><Brand /><Link className="back-link" href="/"><ArrowLeft size={15} /> Back to home</Link><div className="auth-content signup-content"><div className="eyebrow">A BETTER WAY TO HOME</div><h1>Make home feel<br /><span className="serif-accent">more in sync.</span></h1><p className="auth-intro">One simple account for the people, services and little details that keep life running.</p><AuthForm mode="signup" /><p className="auth-switch">Already have an account? <Link href="/login">Log in <ArrowRight size={14} /></Link></p><div className="secure-note"><ShieldCheck size={14} /> Your information stays private and secure</div></div><div className="auth-bottom">© 2026 GharSync <span>·</span> Made for home</div></section>
+    <aside className="auth-aside signup-aside"><div className="aside-top"><span><Sparkles size={15} /> A CALMER KIND OF HOME CARE</span><span>01 <i /> 03</span></div><div className="aside-art"><div className="aside-sun"/><div className="aside-home"><div className="aside-roof"/><div className="aside-house"><i/><b/><i/></div></div><div className="aside-leaf leaf-a"/><div className="aside-leaf leaf-b"/><div className="aside-note"><span className="note-check"><Check size={15}/></span><div><b>Your home, all caught up.</b><small>People, plans and peace of mind.</small></div></div></div><div className="aside-quote"><div className="quote-mark">“</div><blockquote>Home is a lot. Keeping it together shouldn't be.</blockquote><p>GHARSYNC HOME</p></div><div className="aside-pagination"><i className="active"/><i/><i/></div></aside></main>;
+}
