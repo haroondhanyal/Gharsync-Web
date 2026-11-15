@@ -1,0 +1,40 @@
+import Link from "next/link";
+import { BarChart3, ContactRound, UsersRound } from "lucide-react";
+import { Brand } from "@/components/brand";
+import { OrganizationSwitcher } from "@/components/organization-switcher";
+import { SignOutButton } from "@/components/sign-out-button";
+
+type Membership = { organization: { id: string; name: string }; role: string };
+type User = { fullName: string; email: string; memberships: Membership[] };
+
+const navigation = [
+  { href: "/dashboard", label: "Overview", icon: BarChart3 },
+  { href: "/customers", label: "Customers", icon: ContactRound },
+  { href: "/team", label: "Team & branches", icon: UsersRound },
+];
+
+export function AppFrame({ user, organizationId, active, children }: { user: User; organizationId: string; active: string; children: React.ReactNode }) {
+  const organizations = user.memberships.map((membership) => membership.organization);
+  const selected = organizations.find((organization) => organization.id === organizationId);
+  const role = user.memberships.find((membership) => membership.organization.id === organizationId)?.role;
+  const canManageTeam = role === "OWNER" || role === "ADMIN";
+  const visibleNavigation = navigation.filter((item) => item.href !== "/team" || canManageTeam);
+  return <div className="business-app">
+    <aside className="app-sidebar">
+      <div className="sidebar-brand"><Brand light /><span className="business-label">BUSINESS</span></div>
+      <div className="sidebar-workspace"><span className="workspace-avatar">{(selected?.name ?? "G").slice(0, 1).toUpperCase()}</span><span><small>WORKSPACE</small><b>{selected?.name ?? "Your organization"}</b></span></div>
+      <nav className="app-navigation" aria-label="Business navigation">
+        <span className="nav-section-title">WORKSPACE</span>
+        {visibleNavigation.map(({ href, label, icon: Icon }) => <Link className={active === href ? "active" : ""} href={href} key={href}><Icon size={17} /><span>{label}</span></Link>)}
+        <span className="nav-section-title nav-section-lower">MANAGE</span>
+        {canManageTeam && <Link className={active === "/settings/branches" ? "active" : ""} href="/settings/branches"><UsersRound size={17} /><span>Branches</span></Link>}
+      </nav>
+      <div className="sidebar-help"><span className="help-mark">?</span><span><b>Need a hand?</b><small>Your service team workspace</small></span></div>
+      <div className="sidebar-user"><span className="user-avatar">{user.fullName.trim().slice(0, 1).toUpperCase()}</span><span className="user-info"><b>{user.fullName}</b><small>{user.email}</small></span><SignOutButton /></div>
+    </aside>
+    <section className="app-main">
+      <header className="app-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-breadcrumb"><span>GharSync</span><i>/</i><b>{navigation.find((item) => item.href === active)?.label ?? "Organization"}</b></div><div className="topbar-actions"><OrganizationSwitcher organizations={organizations} selectedId={organizationId} /><span className="topbar-divider"/><span className="topbar-date">Pakistan · PKR</span></div></header>
+      <main className="app-content">{children}</main>
+    </section>
+  </div>;
+}

@@ -48,12 +48,19 @@ model User {
   email        String                 @unique @db.VarChar(320)
   phone        String?                @db.VarChar(32)
   fullName     String                 @db.VarChar(160)
-  passwordHash String?                @db.VarChar(255)
+  passwordHash String                 @db.VarChar(255)
+  phoneVerifiedAt DateTime?
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   deletedAt    DateTime?
   memberships  OrganizationMember[]
   bookingEvents BookingEvent[]
+  sessions      RefreshSession[]
+  otpChallenges OtpChallenge[]
+  resetTokens   PasswordResetToken[]
+  auditLogs     AuditLog[]
+  createdInvites OrganizationInvite[] @relation("InviteCreator")
+  acceptedInvites OrganizationInvite[] @relation("InviteAccepter")
 
   @@index([phone])
   @@map("users")
@@ -77,6 +84,9 @@ model Organization {
   services    Service[]
   bookings    Booking[]
   events      BookingEvent[]
+  sessions    RefreshSession[]
+  auditLogs   AuditLog[]
+  invites     OrganizationInvite[]
 
   @@index([deletedAt])
   @@map("organizations")
@@ -115,6 +125,8 @@ model Branch {
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members        OrganizationMember[]
   bookings       Booking[]
+  customers      Customer[]
+  invites        OrganizationInvite[]
 
   @@unique([organizationId, name])
   @@index([organizationId, city])
@@ -128,16 +140,22 @@ model Customer {
   phone          String            @db.VarChar(32)
   email          String?           @db.VarChar(320)
   notes          String?           @db.Text
+  tags           String[]          @default([])
+  isActive       Boolean           @default(true)
+  branchId       String?           @db.Uuid
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   deletedAt      DateTime?
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch         Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
   addresses      CustomerAddress[]
   properties     Property[]
   bookings       Booking[]
 
   @@index([organizationId, phone])
   @@index([organizationId, fullName])
+  @@index([organizationId, isActive, createdAt])
+  @@index([branchId, isActive])
   @@map("customers")
 }
 
@@ -270,4 +288,114 @@ model BookingEvent {
   @@index([organizationId, bookingId, createdAt])
   @@index([actorUserId])
   @@map("booking_events")
+}
+
+model RefreshSession {
+  id             String       @id @default(uuid()) @db.Uuid
+  familyId       String       @db.Uuid
+  userId         String       @db.Uuid
+  organizationId String?      @db.Uuid
+  tokenHash      String       @unique @db.Char(64)
+  createdAt      DateTime     @default(now())
+  lastUsedAt     DateTime?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, revokedAt, expiresAt])
+  @@index([familyId, revokedAt])
+  @@map("refresh_sessions")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(100)
+  description String           @db.VarChar(240)
+  createdAt   DateTime         @default(now())
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String           @id @default(uuid()) @db.Uuid
+  role         OrganizationRole
+  permissionId String           @db.Uuid
+  permission   Permission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+model OtpChallenge {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  phone       String    @db.VarChar(32)
+  codeHash    String    @db.Char(64)
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt, consumedAt])
+  @@map("otp_challenges")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique @db.Char(64)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt, usedAt])
+  @@map("password_reset_tokens")
+}
+
+model AuditLog {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String?       @db.Uuid
+  actorUserId    String?       @db.Uuid
+  action         String        @db.VarChar(100)
+  resourceType   String?       @db.VarChar(80)
+  resourceId     String?       @db.VarChar(80)
+  ipAddress      String?       @db.VarChar(64)
+  userAgent      String?       @db.VarChar(500)
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actor          User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model OrganizationInvite {
+  id               String           @id @default(uuid()) @db.Uuid
+  organizationId   String           @db.Uuid
+  branchId         String?          @db.Uuid
+  invitedByUserId  String           @db.Uuid
+  acceptedByUserId String?          @db.Uuid
+  email            String           @db.VarChar(320)
+  role             OrganizationRole @default(STAFF)
+  tokenHash        String           @unique @db.Char(64)
+  createdAt        DateTime         @default(now())
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch           Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invitedBy        User             @relation("InviteCreator", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  acceptedBy       User?            @relation("InviteAccepter", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, email, acceptedAt])
+  @@index([expiresAt, acceptedAt])
+  @@map("organization_invites")
 }
