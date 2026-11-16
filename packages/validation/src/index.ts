@@ -4,6 +4,10 @@ export const pakistanPhoneSchema = z.string()
   .trim()
   .regex(/^(\+92|0092|0)3\d{9}$/, "Enter a valid Pakistan mobile number.");
 
+export const internationalPhoneSchema = z.string()
+  .trim()
+  .regex(/^\+[1-9]\d{7,14}$/, "Enter a valid international phone number with country code.");
+
 export const createOrganizationSchema = z.object({
   name: z.string().trim().min(2).max(180),
   slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100),
@@ -17,7 +21,7 @@ const signUpBaseSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
   email: z.email().trim().toLowerCase(),
   password: z.string().min(12).max(128),
-  phone: pakistanPhoneSchema,
+  phone: z.union([internationalPhoneSchema, pakistanPhoneSchema]),
 });
 
 const businessTypes = ["AC_REPAIR", "ELECTRICAL", "PLUMBING", "APPLIANCE_REPAIR", "SOLAR", "GENERAL_MAINTENANCE", "OTHER"] as const;
@@ -27,6 +31,7 @@ export const signUpSchema = z.discriminatedUnion("accountType", [
     organizationName: z.string().trim().min(2).max(180),
     businessType: z.enum(businessTypes),
     city: z.string().trim().min(2).max(100),
+    countryCode: z.string().regex(/^[A-Z]{2}$/).default("PK"),
   }).strict(),
   signUpBaseSchema.extend({ accountType: z.literal("team") }).strict(),
 ]);

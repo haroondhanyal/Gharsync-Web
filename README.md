@@ -21,16 +21,18 @@ GharSync is a Pakistan-first workspace for home-service businesses. It connects 
 - **For service teams:** customer management, job scheduling, workforce profiles, branch stock, quotations and payment verification.
 - **For operators:** workspace plans and usage limits, a protected platform console, support queue and audited configuration.
 - **Defaults:** PKR, `Asia/Karachi`, English UI with Urdu-capable text workflows.
+- **Signup locations:** all 249 country/territory options with flags and offline country-specific city suggestions; any city can also be typed. See [location data and attribution](docs/data/README.md).
 
 ## Current UI
 
-These screenshots are captured from the running web app in Chrome at 1440 × 1000. Authenticated screens use a local development workspace.
+These screenshots are captured from the running web app in Chrome. Authenticated screens use a local development workspace.
 
 | Screen | Preview |
 |---|---|
 | Public home | ![GharSync home page](docs/screenshots/gharsync-home.png) |
 | Sign up | ![GharSync sign-up page](docs/screenshots/gharsync-signup.png) |
 | Sign in | ![GharSync sign-in page](docs/screenshots/gharsync-login.png) |
+| Password recovery | ![GharSync password recovery page](docs/screenshots/gharsync-forgot-password.png) |
 | Business dashboard | ![GharSync business dashboard](docs/screenshots/gharsync-dashboard.png) |
 | Business dashboard · mobile | ![GharSync dashboard on mobile](docs/screenshots/gharsync-dashboard-mobile.png) |
 | Notifications | ![GharSync notifications](docs/screenshots/gharsync-notifications.png) |
@@ -118,14 +120,14 @@ With the API running in local development:
 npm run seed:demo
 ```
 
-The command creates a business and technician, two Lahore homes, an AC appliance and solar inverter, service catalog entries, customers, bookings, quotes, a paid invoice, technician availability/leave, a supplier and detailed HVAC/electrical parts, branch stock movements, a warranty claim, notifications and billing requests. It is repeatable and prints the generated owner email and password at completion. It refuses production mode and non-local API hosts. It creates demo records in the selected local database; remove `var/pglite` while the API is stopped to reset local data.
+The command creates four business workspaces (Lahore, Karachi, Islamabad and Multan), each with an owner, administrator and technician. Every workspace gets ten customers, properties, warrantied assets, services, completed bookings with accepted quotes, paid invoices, inventory products with stock, resolved warranty claims, and in-app notifications. Ten custom local illustrations are attached to customer, property and asset records, plus booking visit photos; image attachments now show inline previews. That is 12 login accounts total, within the local Free plan's team limit. All accounts use `GharSyncDemo!2026`; set `DEMO_PASSWORD` to choose another password and `DEMO_SUFFIX` to set the email/data suffix (by default each run gets a unique suffix). It refuses production mode and non-local API hosts. Platform administrator access is separately controlled by `PLATFORM_ADMIN_EMAILS` in `.env`; add a seeded owner email there to try the platform console.
 
 ### Useful commands
 
 | Command | Purpose |
 |---|---|
 | `npm run dev:all` | Run API + web, using embedded local database |
-| `npm run seed:demo` | Add a representative local organization and product/workflow records |
+| `npm run seed:demo` | Add 12 local demo accounts across four workspaces |
 | `npm run typecheck` | Type-check every configured workspace |
 | `npm test` | Run API validation and workflow unit tests |
 | `npm run build:api` | Compile NestJS API |

@@ -20,6 +20,19 @@ export class DocumentsController {
     return this.documents.upload(auth, file, target);
   }
 
+  @Get(":documentId/preview")
+  @RequirePermission("properties.read")
+  async preview(@CurrentAuth() auth: AuthContext, @Param("documentId", ParseUUIDPipe) id: string, @Res() response: Response) {
+    const document = await this.documents.download(auth, id);
+    if (!document.mimeType.startsWith("image/")) return response.status(415).end();
+    response.setHeader("Content-Type", document.mimeType);
+    response.setHeader("Content-Length", document.sizeBytes);
+    response.setHeader("Content-Disposition", "inline");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "private, no-store");
+    response.end(document.buffer);
+  }
+
   @Get(":documentId")
   @RequirePermission("properties.read")
   async download(@CurrentAuth() auth: AuthContext, @Param("documentId", ParseUUIDPipe) id: string, @Res() response: Response) {

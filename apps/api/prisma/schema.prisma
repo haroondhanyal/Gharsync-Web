@@ -239,6 +239,7 @@ model Branch {
   organizationId String               @db.Uuid
   name           String               @db.VarChar(160)
   city           String               @db.VarChar(100)
+  countryCode    String               @default("PK") @db.Char(2)
   address        String?              @db.VarChar(500)
   phone          String?              @db.VarChar(32)
   isDefault      Boolean              @default(false)

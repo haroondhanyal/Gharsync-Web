@@ -20,7 +20,9 @@ import { PlatformModule } from "./platform/platform.module.js";
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env", ".env"] }),
     ThrottlerModule.forRoot([
       { name: "default", ttl: 60_000, limit: process.env.NODE_ENV === "development" ? 600 : 120 },
-      { name: "auth", ttl: 60_000, limit: 8 },
+      // The named auth bucket is global too; keep its default high and let the
+      // auth controller's per-route @Throttle limits protect sign-in/signup.
+      { name: "auth", ttl: 60_000, limit: process.env.NODE_ENV === "production" ? 120 : 600 },
     ]),
     PrismaModule,
     AuthModule,

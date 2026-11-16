@@ -22,11 +22,13 @@ type RequestInfo = { ip?: string; userAgent?: string };
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const slugPart = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 72) || "business";
 const normalizePhone = (phone: string) => {
-  let digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("0")) digits = digits.slice(1);
-  if (digits.startsWith("92")) digits = digits.slice(2);
-  return `+92${digits}`;
+  const compact = phone.trim().replace(/[^\d+]/g, "");
+  if (compact.startsWith("+")) return `+${compact.slice(1).replace(/\D/g, "")}`;
+  let digits = compact.replace(/\D/g, "");
+  if (digits.startsWith("00")) return `+${digits.slice(2)}`;
+  if (digits.startsWith("0")) return `+92${digits.slice(1)}`;
+  if (digits.startsWith("92")) return `+${digits}`;
+  return `+${digits}`;
 };
 
 @Injectable()
@@ -86,6 +88,7 @@ export class AuthService {
     organizationName?: string;
     businessType?: string;
     city?: string;
+    countryCode?: string;
   }, info: RequestInfo) {
     try { authSecret(this.config, "JWT_ACCESS_SECRET"); authSecret(this.config, "JWT_REFRESH_SECRET"); } catch {
       throw new ServiceUnavailableException("Authentication is not configured. Set the JWT secrets first.");
@@ -112,7 +115,7 @@ export class AuthService {
           organization = await tx.organization.create({
             data: {
               name, slug: `${slugPart(name)}-${randomUUID().slice(0, 8)}`,
-              businessType: input.businessType, branches: { create: { name: "Main branch", city, isDefault: true } },
+              businessType: input.businessType, branches: { create: { name: "Main branch", city, countryCode: input.countryCode ?? "PK", isDefault: true } },
             },
             select: { id: true },
           });

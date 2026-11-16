@@ -1,0 +1,1 @@
+ALTER TABLE "branches" ADD COLUMN "countryCode" CHAR(2) NOT NULL DEFAULT 'PK';

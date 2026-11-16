@@ -1,12 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Eye, EyeOff, ArrowRight, LoaderCircle } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, LoaderCircle, Wind, Zap, Droplets, Refrigerator, Sun, House, Wrench, ChevronDown } from "lucide-react";
+import { countries } from "@/lib/locations";
+import { phoneCountryDetails } from "@/lib/phone-country";
+import { CityAutocomplete } from "@/components/city-autocomplete";
 
 type AuthMode = "login" | "signup";
 type AccountType = "business" | "team";
+
+const serviceTypes = [
+  { value: "AC_REPAIR", label: "AC repair", icon: Wind },
+  { value: "ELECTRICAL", label: "Electrical", icon: Zap },
+  { value: "PLUMBING", label: "Plumbing", icon: Droplets },
+  { value: "APPLIANCE_REPAIR", label: "Appliance repair", icon: Refrigerator },
+  { value: "SOLAR", label: "Solar care", icon: Sun },
+  { value: "GENERAL_MAINTENANCE", label: "Home maintenance", icon: House },
+  { value: "OTHER", label: "Other services", icon: Wrench },
+] as const;
 
 function errorMessage(body: unknown) {
   if (typeof body === "object" && body && "message" in body) {
@@ -22,7 +35,41 @@ export function AuthForm({ mode, inviteToken, redirectTo }: { mode: AuthMode; in
   const accountType: AccountType = inviteToken ? "team" : "business";
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [businessType, setBusinessType] = useState<(typeof serviceTypes)[number]["value"]>("AC_REPAIR");
+  const [countryCode, setCountryCode] = useState("PK");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [city, setCity] = useState("");
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
   const isSignup = mode === "signup";
+  const service = serviceTypes.find((item) => item.value === businessType) ?? serviceTypes[0];
+  const ServiceIcon = service.icon;
+  const phoneCountry = countries.find((item) => item.code === countryCode) ?? countries[0]!;
+  const phoneDetails = useMemo(() => phoneCountryDetails(countryCode), [countryCode]);
+  const minPhoneDigits = phoneDetails.allowedLengths.length ? Math.min(...phoneDetails.allowedLengths) : undefined;
+  const maxPhoneDigits = phoneDetails.allowedLengths.length ? Math.max(...phoneDetails.allowedLengths) : 15;
+  const phoneLengthPattern = phoneDetails.allowedLengths.length
+    ? `(?:${phoneDetails.allowedLengths.map((length) => `\\d{${length}}`).join("|")})`
+    : "\\+[1-9]\\d{7,14}";
+  const phoneNumberE164 = phoneDetails.callingCode
+    ? `${phoneDetails.callingCode}${phoneNumber.replace(/\D/g, "")}`
+    : phoneNumber.replace(/[^\d+]/g, "");
+
+  useEffect(() => {
+    let current = true;
+    setCitySuggestions([]);
+    if (!isSignup || accountType !== "business") {
+      setCitiesLoading(false);
+      return () => { current = false; };
+    }
+    setCitiesLoading(true);
+    fetch(`/data/cities/${countryCode}.json`, { cache: "force-cache" })
+      .then((response) => response.ok ? response.json() : [])
+      .then((data: unknown) => { if (current) setCitySuggestions(Array.isArray(data) ? data.filter((city): city is string => typeof city === "string") : []); })
+      .catch(() => { if (current) setCitySuggestions([]); })
+      .finally(() => { if (current) setCitiesLoading(false); });
+    return () => { current = false; };
+  }, [accountType, countryCode, isSignup]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,12 +81,13 @@ export function AuthForm({ mode, inviteToken, redirectTo }: { mode: AuthMode; in
           accountType,
           fullName: String(data.get("name") ?? ""),
           email: String(data.get("email") ?? ""),
-          phone: String(data.get("phone") ?? ""),
+          phone: phoneNumberE164,
           password: String(data.get("password") ?? ""),
           ...(accountType === "business" ? {
             organizationName: String(data.get("organizationName") ?? ""),
             businessType: String(data.get("businessType") ?? "OTHER"),
             city: String(data.get("city") ?? ""),
+            countryCode,
           } : {}),
         }
       : { email: String(data.get("email") ?? ""), password: String(data.get("password") ?? "") };
@@ -69,12 +117,12 @@ export function AuthForm({ mode, inviteToken, redirectTo }: { mode: AuthMode; in
     {isSignup && <>
       {!inviteToken && <div className="account-type-choice" aria-label="Account type"><span className="selected">Service business</span><span>Team members join with an invitation</span></div>}
       <label>Full name<input name="name" autoComplete="name" placeholder="e.g. Ayesha Khan" minLength={2} maxLength={160} required /></label>
-      <label>Phone number<input name="phone" type="tel" autoComplete="tel" placeholder="03XXXXXXXXX" pattern="(\+92|0092|0)3[0-9]{9}" title="Enter a Pakistan mobile number, such as 03XXXXXXXXX" required /></label>
+      <label className="phone-field">Mobile number<div className="phone-entry"><div className="phone-country-picker"><select value={countryCode} onChange={(event) => { setCountryCode(event.target.value); setCity(""); setPhoneNumber(""); }} aria-label="Phone country">{countries.map((item) => <option key={item.code} value={item.code} suppressHydrationWarning>{item.flag}  {item.name}</option>)}</select><ChevronDown size={15}/></div><div className="phone-number-input">{phoneDetails.callingCode && <span>{phoneDetails.callingCode}</span>}<input name="phoneNational" type="tel" inputMode={phoneDetails.callingCode ? "numeric" : "tel"} autoComplete="tel-national" value={phoneNumber} onChange={(event) => { const value = phoneDetails.callingCode ? event.target.value.replace(/\D/g, "").slice(0, maxPhoneDigits) : event.target.value.replace(/[^\d+]/g, "").slice(0, 16); setPhoneNumber(value); }} placeholder={phoneDetails.callingCode ? `${minPhoneDigits === maxPhoneDigits ? minPhoneDigits : `${minPhoneDigits}–${maxPhoneDigits}`} digits` : "+ country code and number"} minLength={phoneDetails.callingCode ? minPhoneDigits : undefined} maxLength={phoneDetails.callingCode ? maxPhoneDigits : 16} pattern={phoneLengthPattern} title={phoneDetails.callingCode ? `Enter ${phoneDetails.allowedLengths.join(" or ")} digits for ${phoneCountry.name}.` : "Include the full country calling code, such as +67212345678."} required /></div></div><small className="field-hint">{phoneDetails.callingCode ? `${phoneCountry.name} · enter ${phoneDetails.allowedLengths.join(" or ")} digits after ${phoneDetails.callingCode}.` : "This territory has no separate calling code. Enter a complete international number."}</small></label>
       {accountType === "business" && <>
         <label>Business name<input name="organizationName" autoComplete="organization" placeholder="e.g. Lahore Home Care" minLength={2} maxLength={180} required /></label>
-        <div className="form-row">
-          <label>Service type<select name="businessType" defaultValue="AC_REPAIR"><option value="AC_REPAIR">AC repair</option><option value="ELECTRICAL">Electrical</option><option value="PLUMBING">Plumbing</option><option value="APPLIANCE_REPAIR">Appliance repair</option><option value="SOLAR">Solar care</option><option value="GENERAL_MAINTENANCE">Home maintenance</option><option value="OTHER">Other</option></select></label>
-          <label>City<input name="city" placeholder="e.g. Lahore" minLength={2} maxLength={100} required /></label>
+        <div className="form-row signup-location">
+          <label>Service type<div className="service-type-picker"><span className="service-type-icon"><ServiceIcon size={17}/></span><select name="businessType" value={businessType} onChange={(event) => setBusinessType(event.target.value as typeof businessType)} aria-label="Service type">{serviceTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select><ChevronDown size={14}/></div></label>
+          <label className="city-field">City or town <CityAutocomplete value={city} onChange={setCity} cities={citySuggestions} loading={citiesLoading}/></label>
         </div>
       </>}
     </>}
