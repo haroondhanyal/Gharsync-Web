@@ -147,7 +147,7 @@ Booking creation and important booking status changes write in-app messages for 
 
 The assistant can draft request summaries, service-category suggestions, maintenance reminders and quotation wording. When text is sent to a configured provider, email addresses and Pakistan mobile patterns are redacted; only an active catalog service and its current configured price bounds are supplied for quote context. The model does not set price or approve the quote. Every attempt writes an organization-scoped usage record and returns a human-review disclaimer.
 
-Configure server-only `AI_PROVIDER_NAME`, `AI_PROVIDER_URL` and `AI_PROVIDER_API_KEY`. AI requests require a live Growth/Business subscription and the `ai-assistant` platform flag enabled by an allowlisted operator. No AI provider is bundled or called by default.
+The help desk and service draft assistant use local Ollama by default. Install Ollama and run `ollama pull lfm3-omni`; set `OLLAMA_BASE_URL` and `OLLAMA_MODEL` on the API server if needed. The app checks that the configured model is installed before showing the draft provider as ready. The multimodal help desk accepts images, PDF text and sampled video frames; PDF reading needs Poppler (`pdftotext`) and video reading needs FFmpeg. Draft assistance requires a live Growth/Business subscription and the `ai-assistant` platform flag enabled by an allowlisted operator. An optional OpenAI-compatible draft adapter can override Ollama with server-only `AI_PROVIDER_NAME`, `AI_PROVIDER_URL` and `AI_PROVIDER_API_KEY`.
 
 ## Phase 9 · Plans and platform control
 
@@ -169,7 +169,7 @@ Run the local end-to-end suite after `npm run dev:all`:
 node scripts/e2e-local.mjs
 ```
 
-It verifies signup/OTP, multi-tenant business records, service and booking flows, technician assignment, branch transfers, warranty and invoices, plan/trial records, notification delivery states, AI configuration/audit, unpaid plan requests and denial of the platform console to normal business users. Unit tests cover workflow paths, payment calculations, validation and stock rules.
+It verifies signup/OTP, multi-tenant business records, service and booking flows, technician assignment, branch transfers, warranty and invoices, plan/trial records, notification delivery states, AI plan gating, unpaid plan requests and denial of the platform console to normal business users. Unit tests cover workflow paths, payment calculations, validation and stock rules.
 
 For production rollout and restore steps, see [the deployment guide](docs/deployment/README.md). Feature phases and ownership boundaries live in [docs/DEVELOPMENT_PHASES.md](docs/DEVELOPMENT_PHASES.md).
 

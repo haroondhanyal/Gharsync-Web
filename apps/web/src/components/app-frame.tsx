@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench, CalendarClock, Boxes, ShieldCheck, Bell, Bot, CreditCard, Command } from "lucide-react";
+import { BarChart3, Building2, ContactRound, FileText, ListTodo, Settings2, UsersRound, Wrench, CalendarClock, Boxes, ShieldCheck, Bell, Bot, CreditCard, Command, CircleHelp } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
 
 type Membership = { organization: { id: string; name: string }; role: string };
-type User = { fullName: string; email: string; memberships: Membership[] };
+type User = { fullName: string; email: string; avatarUrl?: string | null; memberships: Membership[] };
 
 const navigation = [
   { href: "/dashboard", label: "Overview", icon: BarChart3 },
@@ -20,6 +20,7 @@ const navigation = [
   { href: "/team", label: "Team & branches", icon: UsersRound },
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/assistant", label: "AI assistant", icon: Bot },
+  { href: "/help-desk", label: "Help desk chat", icon: CircleHelp },
   { href: "/billing", label: "Plans & billing", icon: CreditCard },
   { href: "/platform", label: "Platform admin", icon: Command },
 ];
@@ -40,10 +41,12 @@ export function AppFrame({ user, organizationId, active, children }: { user: Use
         <span className="nav-section-title">WORKSPACE</span>
         {visibleNavigation.map(({ href, label, icon: Icon }) => <Link className={active === href ? "active" : ""} href={href} key={href}><Icon size={17} /><span>{label}</span></Link>)}
         <span className="nav-section-title nav-section-lower">MANAGE</span>
+        <Link className={active === "/settings/profile" ? "active" : ""} href="/settings/profile"><UsersRound size={17} /><span>My profile</span></Link>
+        <Link className={active === "/settings/appearance" ? "active" : ""} href="/settings/appearance"><Settings2 size={17} /><span>Appearance</span></Link>
         {canManageTeam && <Link className={active === "/settings/branches" ? "active" : ""} href="/settings/branches"><Settings2 size={17} /><span>Branches</span></Link>}
       </nav>
       <div className="sidebar-help"><span className="help-mark">?</span><span><b>Need a hand?</b><small>Your service team workspace</small></span></div>
-      <div className="sidebar-user"><span className="user-avatar">{user.fullName.trim().slice(0, 1).toUpperCase()}</span><span className="user-info"><b>{user.fullName}</b><small>{user.email}</small></span><SignOutButton /></div>
+      <div className="sidebar-user"><Link href="/settings/profile" className="user-avatar-link" aria-label="Profile settings">{user.avatarUrl ? <img className="user-avatar-image" src={`${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1"}${user.avatarUrl}`} alt=""/> : <span className="user-avatar">{user.fullName.trim().slice(0, 1).toUpperCase()}</span>}</Link><span className="user-info"><b>{user.fullName}</b><small>{user.email}</small><Link href="/settings/profile">Edit profile</Link></span><SignOutButton /></div>
     </aside>
     <section className="app-main">
       <header className="app-topbar"><div className="mobile-brand"><Brand /></div><div className="topbar-breadcrumb"><span>GharSync</span><i>/</i><b>{navigation.find((item) => item.href === active)?.label ?? "Organization"}</b></div><div className="topbar-actions"><OrganizationSwitcher organizations={organizations} selectedId={organizationId} /><span className="topbar-divider"/><span className="topbar-date">Pakistan · PKR</span></div></header>

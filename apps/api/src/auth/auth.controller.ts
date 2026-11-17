@@ -1,12 +1,14 @@
 import {
-  Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res,
+  Body, Controller, Delete, Get, Header, HttpCode, Param, Patch, Post, Req, Res, UploadedFile, UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import {
   passwordResetCompleteSchema, passwordResetRequestSchema, phoneOtpSchema,
-  signInSchema, signUpSchema,
+  signInSchema, signUpSchema, profileUpdateSchema, passwordChangeSchema,
 } from "@gharsync/validation";
 import { AllowUnverified, CurrentAuth, Public, type AuthContext } from "./auth-context.js";
 import { AuthService } from "./auth.service.js";
@@ -97,6 +99,35 @@ export class AuthController {
   @Get("me")
   me(@CurrentAuth() current: AuthContext) {
     return this.auth.getMe(current.userId, current.organizationId);
+  }
+
+  @Patch("me/profile")
+  updateProfile(@CurrentAuth() current: AuthContext, @Body({ schema: profileUpdateSchema }) body: z.infer<typeof profileUpdateSchema>) {
+    return this.auth.updateProfile(current.userId, body);
+  }
+
+  @Patch("me/password")
+  changePassword(@CurrentAuth() current: AuthContext, @Body({ schema: passwordChangeSchema }) body: z.infer<typeof passwordChangeSchema>) {
+    return this.auth.changePassword(current, body.currentPassword, body.newPassword);
+  }
+
+  @Post("me/avatar")
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  uploadAvatar(@CurrentAuth() current: AuthContext, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.auth.uploadAvatar(current.userId, file);
+  }
+
+  @Delete("me/avatar")
+  removeAvatar(@CurrentAuth() current: AuthContext) { return this.auth.removeAvatar(current.userId); }
+
+  @Get("me/avatar")
+  @Header("Cache-Control", "private, no-store")
+  async avatar(@CurrentAuth() current: AuthContext, @Res() response: Response) {
+    const image = await this.auth.getAvatar(current.userId);
+    response.setHeader("Content-Type", image.mimeType);
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.setHeader("Cache-Control", "private, no-store");
+    return response.end(image.buffer);
   }
 
   @Post("organizations/:organizationId/select")

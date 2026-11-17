@@ -3,12 +3,15 @@ import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { AuthContext } from "../auth/auth-context.js";
 import type { CustomerCreateInput, CustomerUpdateInput } from "@gharsync/validation";
+import { deleteImage, imageMime, readImage, saveImage } from "../common/image-storage.js";
 
 const normalizePhone = (phone: string) => {
-  let digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
+  const trimmed = phone.trim();
+  if (trimmed.startsWith("+")) return `+${trimmed.slice(1).replace(/\D/g, "")}`;
+  let digits = trimmed.replace(/\D/g, "");
+  if (digits.startsWith("00")) return `+${digits.slice(2)}`;
   if (digits.startsWith("0")) digits = digits.slice(1);
-  if (digits.startsWith("92")) digits = digits.slice(2);
+  if (digits.startsWith("92")) return `+${digits}`;
   return `+92${digits}`;
 };
 
@@ -48,14 +51,14 @@ export class CustomersService {
         take: options.pageSize,
         orderBy: [{ createdAt: "desc" }, { id: "asc" }],
         select: {
-          id: true, fullName: true, phone: true, email: true, tags: true, isActive: true, createdAt: true,
+          id: true, fullName: true, phone: true, countryCode: true, city: true, photoUpdatedAt: true, email: true, tags: true, isActive: true, createdAt: true,
           addresses: { where: { isDefault: true }, take: 1, select: { address: true, city: true } },
           _count: { select: { bookings: true } },
         },
       }),
       this.prisma.customer.count({ where }),
     ]);
-    return { data: items, pagination: { page: options.page, pageSize: options.pageSize, total, totalPages: Math.ceil(total / options.pageSize) } };
+    return { data: items.map(({ photoUpdatedAt, ...item }) => ({ ...item, photoUrl: photoUpdatedAt ? `/api/v1/customers/${item.id}/photo?v=${photoUpdatedAt.getTime()}` : null })), pagination: { page: options.page, pageSize: options.pageSize, total, totalPages: Math.ceil(total / options.pageSize) } };
   }
 
   async create(auth: AuthContext, input: CustomerCreateInput) {
@@ -63,7 +66,6 @@ export class CustomersService {
     const phone = normalizePhone(input.phone);
     const duplicate = await this.prisma.customer.findFirst({ where: { organizationId, phone, deletedAt: null }, select: { id: true, fullName: true } });
     if (duplicate) throw new ConflictException({ message: "A customer with this phone number already exists.", existingCustomerId: duplicate.id, existingCustomerName: duplicate.fullName });
-    if (Boolean(input.address) !== Boolean(input.city)) throw new BadRequestException("Provide both address and city, or leave both empty.");
     let branchId = auth.branchId;
     if (!branchId) {
       const defaultBranch = await this.prisma.branch.findFirst({ where: { organizationId, isDefault: true, deletedAt: null }, select: { id: true } });
@@ -72,11 +74,11 @@ export class CustomersService {
     try {
       const customer = await this.prisma.customer.create({
         data: {
-          organizationId, branchId, fullName: input.fullName.trim(), phone,
+          organizationId, branchId, fullName: input.fullName.trim(), phone, countryCode: input.countryCode, city: input.city,
           email: input.email?.trim() || null, notes: input.notes?.trim() || null, tags: input.tags,
           ...(input.address && input.city ? { addresses: { create: { address: input.address, city: input.city, isDefault: true } } } : {}),
         },
-        select: { id: true, fullName: true, phone: true, email: true, notes: true, tags: true, isActive: true, createdAt: true },
+        select: { id: true, fullName: true, phone: true, countryCode: true, city: true, email: true, notes: true, tags: true, isActive: true, createdAt: true },
       });
       await this.prisma.auditLog.create({ data: { organizationId, actorUserId: auth.userId, action: "customer.created", resourceType: "customer", resourceId: customer.id } });
       return customer;
@@ -99,14 +101,15 @@ export class CustomersService {
       },
     });
     if (!customer) throw new NotFoundException("Customer not found.");
-    return customer;
+    const { photoStorageKey, photoMimeType, photoUpdatedAt, ...safeCustomer } = customer;
+    return { ...safeCustomer, photoUrl: photoStorageKey && photoMimeType && photoUpdatedAt ? `/api/v1/customers/${customer.id}/photo?v=${photoUpdatedAt.getTime()}` : null };
   }
 
   async update(auth: AuthContext, customerId: string, input: CustomerUpdateInput) {
     const organizationId = auth.organizationId!;
     const current = await this.prisma.customer.findFirst({
       where: { id: customerId, organizationId, deletedAt: null, ...(auth.branchId ? { branchId: auth.branchId } : {}) },
-      select: { id: true, phone: true, addresses: { where: { isDefault: true }, take: 1, select: { id: true } } },
+      select: { id: true, phone: true, city: true, addresses: { where: { isDefault: true }, take: 1, select: { id: true } } },
     });
     if (!current) throw new NotFoundException("Customer not found.");
     const phone = input.phone ? normalizePhone(input.phone) : undefined;
@@ -114,30 +117,63 @@ export class CustomersService {
       const duplicate = await this.prisma.customer.findFirst({ where: { organizationId, phone, id: { not: customerId }, deletedAt: null }, select: { id: true } });
       if (duplicate) throw new ConflictException("A customer with this phone number already exists.");
     }
-    if (input.address !== undefined && input.city === undefined && !current.addresses[0]) throw new BadRequestException("Provide a city with the address.");
-    if (input.city !== undefined && input.address === undefined && !current.addresses[0]) throw new BadRequestException("Provide an address with the city.");
     const data: Prisma.CustomerUpdateInput = {
       ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
       ...(phone ? { phone } : {}),
+      ...(input.countryCode !== undefined ? { countryCode: input.countryCode } : {}),
+      ...(input.city !== undefined ? { city: input.city } : {}),
       ...(input.email !== undefined ? { email: input.email.trim() || null } : {}),
       ...(input.notes !== undefined ? { notes: input.notes.trim() || null } : {}),
       ...(input.tags !== undefined ? { tags: input.tags } : {}),
     };
     await this.prisma.$transaction(async (tx) => {
       await tx.customer.update({ where: { id: customerId }, data });
-      if (input.address !== undefined || input.city !== undefined) {
+      if (input.address !== undefined) {
         const addressId = current.addresses[0]?.id;
         const previous = addressId ? await tx.customerAddress.findUnique({ where: { id: addressId }, select: { address: true, city: true } }) : null;
         const address = input.address ?? previous?.address;
-        const city = input.city ?? previous?.city;
-        if (address && city) {
+        const city = input.city ?? previous?.city ?? current.city ?? "";
+        if (address?.trim() && city.trim()) {
           if (addressId) await tx.customerAddress.update({ where: { id: addressId }, data: { address, city } });
           else await tx.customerAddress.create({ data: { customerId, address, city, isDefault: true } });
+        } else if (addressId) {
+          await tx.customerAddress.delete({ where: { id: addressId } });
         }
+      } else if (input.city !== undefined && current.addresses[0]) {
+        await tx.customerAddress.update({ where: { id: current.addresses[0].id }, data: { city: input.city } });
       }
       await tx.auditLog.create({ data: { organizationId, actorUserId: auth.userId, action: "customer.updated", resourceType: "customer", resourceId: customerId } });
     });
     return this.get(auth, customerId);
+  }
+
+  async uploadCustomerPhoto(auth: AuthContext, customerId: string, file: Express.Multer.File | undefined) {
+    const customer = await this.prisma.customer.findFirst({ where: { id: customerId, organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { branchId: auth.branchId } : {}) }, select: { photoStorageKey: true } });
+    if (!customer) throw new NotFoundException("Customer not found.");
+    const mimeType = imageMime(file);
+    const storageKey = await saveImage(file!, mimeType);
+    try {
+      const updated = await this.prisma.customer.update({ where: { id: customerId }, data: { photoStorageKey: storageKey, photoMimeType: mimeType, photoUpdatedAt: new Date() }, select: { photoUpdatedAt: true } });
+      await deleteImage(customer.photoStorageKey);
+      await this.prisma.auditLog.create({ data: { organizationId: auth.organizationId!, actorUserId: auth.userId, action: "customer.photo_updated", resourceType: "customer", resourceId: customerId } });
+      return { photoUrl: `/api/v1/customers/${customerId}/photo?v=${updated.photoUpdatedAt?.getTime()}` };
+    } catch (error) { await deleteImage(storageKey); throw error; }
+  }
+
+  async customerPhoto(auth: AuthContext, customerId: string) {
+    const customer = await this.prisma.customer.findFirst({ where: { id: customerId, organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { branchId: auth.branchId } : {}) }, select: { photoStorageKey: true, photoMimeType: true } });
+    if (!customer?.photoStorageKey || !customer.photoMimeType) throw new NotFoundException("Customer photo not found.");
+    const buffer = await readImage(customer.photoStorageKey);
+    if (!buffer) throw new NotFoundException("Customer photo not found.");
+    return { buffer, mimeType: customer.photoMimeType };
+  }
+
+  async removeCustomerPhoto(auth: AuthContext, customerId: string) {
+    const customer = await this.prisma.customer.findFirst({ where: { id: customerId, organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { branchId: auth.branchId } : {}) }, select: { photoStorageKey: true } });
+    if (!customer) throw new NotFoundException("Customer not found.");
+    await this.prisma.customer.update({ where: { id: customerId }, data: { photoStorageKey: null, photoMimeType: null, photoUpdatedAt: null } });
+    await deleteImage(customer.photoStorageKey);
+    return { status: "removed" };
   }
 
   async archive(auth: AuthContext, customerId: string) {

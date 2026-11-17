@@ -6,7 +6,7 @@ import { serverApi } from "@/lib/server-api";
 import { redirect } from "next/navigation";
 
 type Me = { fullName: string; email: string; currentOrganizationId: string; memberships: { role: string; organization: { id: string; name: string } }[] };
-type Customer = { id: string; fullName: string; phone: string; email: string | null; notes: string | null; tags: string[]; addresses: { address: string; city: string }[] };
+type Customer = { id: string; fullName: string; phone: string; countryCode: string; city: string | null; photoUrl: string | null; email: string | null; notes: string | null; tags: string[]; addresses: { address: string; city: string }[] };
 
 export default async function EditCustomerPage({ params }: { params: Promise<{ customerId: string }> }) {
   const { customerId } = await params;

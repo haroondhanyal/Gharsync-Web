@@ -7,6 +7,7 @@ import type { AuthContext } from "../auth/auth-context.js";
 import { DeliveryService } from "../auth/delivery.service.js";
 import { ensureDefaultPermissions } from "../permissions/permission-catalog.js";
 import { EntitlementsService } from "../platform/entitlements.service.js";
+import { deleteImage, imageMime, readImage, saveImage } from "../common/image-storage.js";
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const slugPart = (value: string) => value.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 72) || "business";
@@ -40,20 +41,50 @@ export class OrganizationsService {
   }
 
   async branches(auth: AuthContext) {
-    return this.prisma.branch.findMany({
+    const rows = await this.prisma.branch.findMany({
       where: { organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { id: auth.branchId } : {}) },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, city: true, address: true, phone: true, isDefault: true, createdAt: true },
+      select: { id: true, name: true, city: true, countryCode: true, address: true, phone: true, photoUpdatedAt: true, isDefault: true, createdAt: true },
     });
+    return rows.map(({ photoUpdatedAt, ...branch }) => ({ ...branch, photoUrl: photoUpdatedAt ? `/api/v1/organizations/branches/${branch.id}/photo?v=${photoUpdatedAt.getTime()}` : null }));
   }
 
-  async createBranch(auth: AuthContext, input: { name: string; city: string; address?: string; phone?: string }) {
+  async createBranch(auth: AuthContext, input: { name: string; city: string; countryCode: string; address?: string; phone?: string }) {
     if (!auth.organizationId) throw new ForbiddenException();
     await this.entitlements.assertCapacity(auth.organizationId, "branches");
     return this.prisma.branch.create({
-      data: { organizationId: auth.organizationId, name: input.name, city: input.city, address: input.address, phone: input.phone },
-      select: { id: true, name: true, city: true, address: true, phone: true, isDefault: true },
+      data: { organizationId: auth.organizationId, name: input.name, city: input.city, countryCode: input.countryCode, address: input.address, phone: input.phone },
+      select: { id: true, name: true, city: true, countryCode: true, address: true, phone: true, isDefault: true },
     });
+  }
+
+  async uploadBranchPhoto(auth: AuthContext, branchId: string, file: Express.Multer.File | undefined) {
+    const branch = await this.prisma.branch.findFirst({ where: { id: branchId, organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { id: auth.branchId } : {}) }, select: { photoStorageKey: true } });
+    if (!branch) throw new NotFoundException("Branch not found.");
+    const mimeType = imageMime(file);
+    const storageKey = await saveImage(file!, mimeType);
+    try {
+      const updated = await this.prisma.branch.update({ where: { id: branchId }, data: { photoStorageKey: storageKey, photoMimeType: mimeType, photoUpdatedAt: new Date() }, select: { photoUpdatedAt: true } });
+      await deleteImage(branch.photoStorageKey);
+      await this.prisma.auditLog.create({ data: { organizationId: auth.organizationId!, actorUserId: auth.userId, action: "branch.photo_updated", resourceType: "branch", resourceId: branchId } });
+      return { photoUrl: `/api/v1/organizations/branches/${branchId}/photo?v=${updated.photoUpdatedAt?.getTime()}` };
+    } catch (error) { await deleteImage(storageKey); throw error; }
+  }
+
+  async branchPhoto(auth: AuthContext, branchId: string) {
+    const branch = await this.prisma.branch.findFirst({ where: { id: branchId, organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { id: auth.branchId } : {}) }, select: { photoStorageKey: true, photoMimeType: true } });
+    if (!branch?.photoStorageKey || !branch.photoMimeType) throw new NotFoundException("Branch photo not found.");
+    const buffer = await readImage(branch.photoStorageKey);
+    if (!buffer) throw new NotFoundException("Branch photo not found.");
+    return { buffer, mimeType: branch.photoMimeType };
+  }
+
+  async removeBranchPhoto(auth: AuthContext, branchId: string) {
+    const branch = await this.prisma.branch.findFirst({ where: { id: branchId, organizationId: auth.organizationId!, deletedAt: null, ...(auth.branchId ? { id: auth.branchId } : {}) }, select: { photoStorageKey: true } });
+    if (!branch) throw new NotFoundException("Branch not found.");
+    await this.prisma.branch.update({ where: { id: branchId }, data: { photoStorageKey: null, photoMimeType: null, photoUpdatedAt: null } });
+    await deleteImage(branch.photoStorageKey);
+    return { status: "removed" };
   }
 
   private requireActiveOrganization(auth: AuthContext, organizationId: string) {

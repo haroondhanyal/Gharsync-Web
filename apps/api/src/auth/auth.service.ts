@@ -1,4 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
   BadRequestException, ConflictException, Injectable, NotFoundException,
   ServiceUnavailableException, UnauthorizedException,
@@ -16,6 +18,7 @@ import { authSecret } from "./auth-secrets.js";
 
 const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
+const avatarRoot = () => resolve(process.env.DOCUMENT_STORAGE_PATH ?? "../../var/documents");
 type TokenPair = { accessToken: string; refreshToken: string };
 type RequestInfo = { ip?: string; userAgent?: string };
 
@@ -104,7 +107,7 @@ export class AuthService {
     try {
       const created = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
-          data: { fullName: input.fullName, email, phone: normalizePhone(input.phone), passwordHash },
+          data: { fullName: input.fullName, email, phone: normalizePhone(input.phone), countryCode: input.countryCode ?? "PK", city: input.city ?? null, passwordHash },
           select: { id: true, email: true, fullName: true },
         });
         let organization = null;
@@ -237,12 +240,70 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
       select: {
-        id: true, email: true, fullName: true, phone: true, phoneVerifiedAt: true, createdAt: true,
+        id: true, email: true, fullName: true, phone: true, countryCode: true, city: true, phoneVerifiedAt: true, createdAt: true, avatarUpdatedAt: true,
         memberships: { where: { status: "ACTIVE", organization: { deletedAt: null } }, select: { role: true, branchId: true, organization: { select: { id: true, name: true, slug: true, currency: true, timezone: true } } } },
       },
     });
     if (!user) throw new UnauthorizedException();
-    return { ...user, currentOrganizationId };
+    return { ...user, avatarUrl: user.avatarUpdatedAt ? `/api/v1/auth/me/avatar?v=${user.avatarUpdatedAt.getTime()}` : null, currentOrganizationId };
+  }
+
+  async updateProfile(userId: string, input: { fullName: string; countryCode: string; phone: string; city: string }) {
+    const phone = input.phone.trim().replace(/[\s()-]/g, "");
+    if (!/^\+[1-9]\d{7,14}$/.test(phone)) throw new BadRequestException("Enter a valid phone number with country calling code.");
+    const duplicate = await this.prisma.user.findFirst({ where: { phone, id: { not: userId }, deletedAt: null }, select: { id: true } });
+    if (duplicate) throw new BadRequestException("This phone number is already used by another account.");
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { fullName: input.fullName.trim(), countryCode: input.countryCode, phone, city: input.city.trim() }, select: { fullName: true, countryCode: true, phone: true, city: true } });
+    await this.audit("auth.profile_updated", userId, null);
+    return user;
+  }
+
+  async changePassword(auth: AuthContext, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: auth.userId }, select: { passwordHash: true } });
+    if (!user || !await this.passwords.verify(currentPassword, user.passwordHash)) throw new BadRequestException("The current password is incorrect.");
+    if (currentPassword === newPassword) throw new BadRequestException("The new password must be different from the current password.");
+    await this.prisma.user.update({ where: { id: auth.userId }, data: { passwordHash: await this.passwords.hash(newPassword) } });
+    await this.prisma.refreshSession.updateMany({ where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.audit("auth.password_changed", auth.userId, auth.organizationId);
+    return { status: "password_changed", otherSessionsRevoked: true };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File | undefined) {
+    if (!file?.buffer?.length) throw new BadRequestException("Choose an image to upload.");
+    if (file.size > 10 * 1024 * 1024) throw new BadRequestException("Profile images must be 10 MB or smaller.");
+    const buffer = file.buffer;
+    const mimeType = buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? "image/png"
+      : buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff ? "image/jpeg"
+      : buffer.length >= 12 && buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP" ? "image/webp" : null;
+    if (!mimeType || file.mimetype !== mimeType) throw new BadRequestException("Upload a valid JPEG, PNG or WebP image.");
+    const old = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatarStorageKey: true } });
+    const storageKey = `avatar-${randomUUID()}.${mimeType.slice(6)}`;
+    const root = avatarRoot();
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    await writeFile(join(root, storageKey), buffer, { flag: "wx", mode: 0o600 });
+    try {
+      const updated = await this.prisma.user.update({ where: { id: userId }, data: { avatarStorageKey: storageKey, avatarMimeType: mimeType, avatarUpdatedAt: new Date() }, select: { avatarUpdatedAt: true } });
+      if (old?.avatarStorageKey) await unlink(join(root, old.avatarStorageKey)).catch(() => undefined);
+      await this.audit("auth.avatar_updated", userId, null);
+      return { avatarUrl: `/api/v1/auth/me/avatar?v=${updated.avatarUpdatedAt?.getTime()}` };
+    } catch (error) { await unlink(join(root, storageKey)).catch(() => undefined); throw error; }
+  }
+
+  async getAvatar(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { avatarStorageKey: true, avatarMimeType: true } });
+    if (!user?.avatarStorageKey || !user.avatarMimeType) throw new NotFoundException("Profile image not found.");
+    const path = resolve(avatarRoot(), user.avatarStorageKey);
+    if (!path.startsWith(`${avatarRoot()}/`)) throw new NotFoundException("Profile image not found.");
+    const buffer = await readFile(path).catch(() => null);
+    if (!buffer) throw new NotFoundException("Profile image not found.");
+    return { buffer, mimeType: user.avatarMimeType };
+  }
+
+  async removeAvatar(userId: string) {
+    const old = await this.prisma.user.update({ where: { id: userId }, data: { avatarStorageKey: null, avatarMimeType: null, avatarUpdatedAt: null }, select: { avatarStorageKey: true } });
+    if (old.avatarStorageKey) await unlink(join(avatarRoot(), old.avatarStorageKey)).catch(() => undefined);
+    await this.audit("auth.avatar_removed", userId, null);
+    return { status: "removed" };
   }
 
   async selectOrganization(auth: AuthContext, organizationId: string) {

@@ -32,7 +32,9 @@ The API sends an HTTP POST with a bearer API key. SMS JSON body is `{ "to": "...
 
 ### AI draft service
 
-`AI_PROVIDER_URL` receives `{ task, language, instructions, text, catalogReference }` with a bearer key. It may return `{ "output": "..." }` or `{ "text": "..." }`. Timeouts and failures are logged. Output must remain a draft, use no invented prices and require staff review. Do not send photos or customer records to this text adapter.
+By default, draft assistance and the help desk use the API server's local Ollama instance. Install Ollama and pull the configured model (`ollama pull lfm3-omni`); set `OLLAMA_BASE_URL` and `OLLAMA_MODEL` server-side. The AI status checks local reachability and model installation. Help desk image analysis uses the model's image input; PDF text extraction needs Poppler and video frame extraction needs FFmpeg. Keep Ollama bound to a trusted local/private interface because help desk prompts are sent to it. Draft assistance requires a live Growth/Business plan and the `ai-assistant` rollout flag.
+
+An optional OpenAI-compatible draft adapter can override Ollama. `AI_PROVIDER_URL` receives `{ task, language, instructions, text, catalogReference }` with a bearer key and may return `{ "output": "..." }` or `{ "text": "..." }`. Email addresses and Pakistan mobile patterns are redacted before sending. Timeouts and failures are logged. Output must remain a draft, use no invented prices and require staff review. This adapter receives text only.
 
 ### Billing
 

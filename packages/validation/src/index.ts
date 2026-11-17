@@ -41,6 +41,9 @@ export const signInSchema = z.object({
   password: z.string().min(1).max(128),
 }).strict();
 
+export const profileUpdateSchema = z.object({ fullName: z.string().trim().min(2).max(160), countryCode: z.string().regex(/^[A-Z]{2}$/), phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/), city: z.string().trim().min(2).max(100) }).strict();
+export const passwordChangeSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: z.string().min(12).max(128) }).strict();
+
 export const passwordResetRequestSchema = z.object({ email: z.email().trim().toLowerCase() }).strict();
 export const passwordResetCompleteSchema = z.object({
   token: z.string().min(32).max(4096),
@@ -62,8 +65,9 @@ export const organizationCreateSchema = z.object({
 export const branchCreateSchema = z.object({
   name: z.string().trim().min(2).max(160),
   city: z.string().trim().min(2).max(100),
+  countryCode: z.string().regex(/^[A-Z]{2}$/).default("PK"),
   address: z.string().trim().max(500).optional(),
-  phone: pakistanPhoneSchema.optional(),
+  phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/).optional(),
 }).strict();
 export const memberUpdateSchema = z.object({
   role: z.enum(["ADMIN", "MANAGER", "STAFF", "TECHNICIAN"]).optional(),
@@ -72,12 +76,13 @@ export const memberUpdateSchema = z.object({
 
 export const customerCreateSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
-  phone: pakistanPhoneSchema,
+  phone: internationalPhoneSchema,
+  countryCode: z.string().regex(/^[A-Z]{2}$/).default("PK"),
+  city: z.string().trim().min(2).max(100),
   email: z.union([z.email().trim().toLowerCase(), z.literal("")]).optional(),
   notes: z.string().trim().max(5000).optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   address: z.string().trim().max(500).optional(),
-  city: z.string().trim().max(100).optional(),
 }).strict();
 
 export const customerUpdateSchema = customerCreateSchema.partial();

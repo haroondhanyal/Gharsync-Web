@@ -1,4 +1,6 @@
-import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import type { Response } from "express";
 import { z } from "zod";
 import { customerCreateSchema, customerQuerySchema, customerUpdateSchema } from "@gharsync/validation";
@@ -33,6 +35,26 @@ export class CustomersController {
   create(@CurrentAuth() auth: AuthContext, @Body({ schema: customerCreateSchema }) body: z.infer<typeof customerCreateSchema>) {
     return this.customers.create(auth, body);
   }
+
+  @Post(":customerId/photo")
+  @RequirePermission("customers.update")
+  @UseInterceptors(FileInterceptor("photo", { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  uploadPhoto(@CurrentAuth() auth: AuthContext, @Param("customerId", { schema: z.uuid() }) id: string, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.customers.uploadCustomerPhoto(auth, id, file);
+  }
+
+  @Get(":customerId/photo")
+  @RequirePermission("customers.read")
+  @Header("Cache-Control", "private, no-store")
+  async customerPhoto(@CurrentAuth() auth: AuthContext, @Param("customerId", { schema: z.uuid() }) id: string, @Res() response: Response) {
+    const image = await this.customers.customerPhoto(auth, id);
+    response.setHeader("Content-Type", image.mimeType); response.setHeader("X-Content-Type-Options", "nosniff"); response.setHeader("Cache-Control", "private, no-store");
+    return response.end(image.buffer);
+  }
+
+  @Delete(":customerId/photo")
+  @RequirePermission("customers.update")
+  removePhoto(@CurrentAuth() auth: AuthContext, @Param("customerId", { schema: z.uuid() }) id: string) { return this.customers.removeCustomerPhoto(auth, id); }
 
   @Get(":customerId")
   @RequirePermission("customers.read")

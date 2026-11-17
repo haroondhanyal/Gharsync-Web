@@ -1,4 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Header, HttpCode, Param, Patch, Post, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import type { Response } from "express";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { z } from "zod";
 import {
   branchCreateSchema, inviteAcceptSchema, inviteCreateSchema, memberUpdateSchema, organizationCreateSchema,
@@ -30,6 +33,29 @@ export class OrganizationsController {
   createBranch(@CurrentAuth() auth: AuthContext, @Body({ schema: branchCreateSchema }) body: z.infer<typeof branchCreateSchema>) {
     return this.organizations.createBranch(auth, body);
   }
+
+  @Post("branches/:branchId/photo")
+  @UseGuards(OrganizationAccessGuard)
+  @RequirePermission("organization.manage")
+  @UseInterceptors(FileInterceptor("photo", { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
+  uploadBranchPhoto(@CurrentAuth() auth: AuthContext, @Param("branchId", { schema: z.uuid() }) branchId: string, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.organizations.uploadBranchPhoto(auth, branchId, file);
+  }
+
+  @Get("branches/:branchId/photo")
+  @UseGuards(OrganizationAccessGuard)
+  @RequirePermission("dashboard.read")
+  @Header("Cache-Control", "private, no-store")
+  async branchPhoto(@CurrentAuth() auth: AuthContext, @Param("branchId", { schema: z.uuid() }) branchId: string, @Res() response: Response) {
+    const image = await this.organizations.branchPhoto(auth, branchId);
+    response.setHeader("Content-Type", image.mimeType); response.setHeader("X-Content-Type-Options", "nosniff"); response.setHeader("Cache-Control", "private, no-store");
+    return response.end(image.buffer);
+  }
+
+  @Delete("branches/:branchId/photo")
+  @UseGuards(OrganizationAccessGuard)
+  @RequirePermission("organization.manage")
+  removeBranchPhoto(@CurrentAuth() auth: AuthContext, @Param("branchId", { schema: z.uuid() }) branchId: string) { return this.organizations.removeBranchPhoto(auth, branchId); }
 
   @Get(":organizationId/members")
   @UseGuards(OrganizationAccessGuard)

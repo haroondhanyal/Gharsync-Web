@@ -141,6 +141,11 @@ model User {
   email        String                 @unique @db.VarChar(320)
   phone        String?                @db.VarChar(32)
   fullName     String                 @db.VarChar(160)
+  countryCode  String                 @default("PK") @db.Char(2)
+  city         String?                @db.VarChar(100)
+  avatarStorageKey String?            @db.VarChar(120)
+  avatarMimeType String?               @db.VarChar(40)
+  avatarUpdatedAt DateTime?
   passwordHash String                 @db.VarChar(255)
   phoneVerifiedAt DateTime?
   createdAt    DateTime               @default(now())
@@ -240,6 +245,9 @@ model Branch {
   name           String               @db.VarChar(160)
   city           String               @db.VarChar(100)
   countryCode    String               @default("PK") @db.Char(2)
+  photoStorageKey String?             @db.VarChar(120)
+  photoMimeType String?               @db.VarChar(40)
+  photoUpdatedAt DateTime?
   address        String?              @db.VarChar(500)
   phone          String?              @db.VarChar(32)
   isDefault      Boolean              @default(false)
@@ -271,6 +279,11 @@ model Customer {
   organizationId String            @db.Uuid
   fullName       String            @db.VarChar(160)
   phone          String            @db.VarChar(32)
+  countryCode    String            @default("PK") @db.Char(2)
+  city           String?           @db.VarChar(100)
+  photoStorageKey String?          @db.VarChar(120)
+  photoMimeType  String?            @db.VarChar(40)
+  photoUpdatedAt DateTime?
   email          String?           @db.VarChar(320)
   notes          String?           @db.Text
   tags           String[]          @default([])

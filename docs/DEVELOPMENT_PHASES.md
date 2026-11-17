@@ -39,7 +39,7 @@ Phases 1 through 10 have implemented local API and web flows. Phase 2 adds passw
 
 Phase 3 adds an organization-scoped overview and customer CRM. Phase 4 adds property/assets, QR access, private documents and service history. Phase 5 adds branch-aware services, booking transitions, quotes, invoice PDF, verified receipts and audited refunds. Phase 6 adds technician profiles, skill matching, weekly availability, leave requests/approvals, completed-job metrics, and assignment checks for work hours and conflicts. Phase 7 adds suppliers, products, branch stocks, receipts, adjustments, reservations, transfers, consumption, reorder warnings and warranty claim lifecycle/expiry alerts. Homeowner approvals and external payment settlement remain later integrations.
 
-The API applies checked-in Prisma migrations to persistent embedded PGlite at startup and seeds current permissions and plan catalog. Run `node scripts/e2e-local.mjs` with the local API running to exercise signup/verification, CRM, homes, booking/billing, workforce, inventory, warranty, notification logs, AI configuration, entitlements and platform-admin denial. `npm run seed:demo` adds a fuller business fixture for local UI review. Production PostgreSQL is configured with `DATABASE_MODE=postgres` and `DATABASE_URL`; production SMS/email, subscription payment, push/WhatsApp delivery and durable file storage remain deployment integrations.
+The API applies checked-in Prisma migrations to persistent embedded PGlite at startup and seeds current permissions and plan catalog. Run `node scripts/e2e-local.mjs` with the local API running to exercise signup/verification, CRM, homes, booking/billing, workforce, inventory, warranty, notification logs, AI plan gating, entitlements and platform-admin denial. `npm run seed:demo` adds a fuller business fixture for local UI review. Production PostgreSQL is configured with `DATABASE_MODE=postgres` and `DATABASE_URL`; production SMS/email, subscription payment, push/WhatsApp delivery and durable file storage remain deployment integrations.
 
 ## Phase 2 and 3 acceptance notes
 
@@ -69,7 +69,7 @@ The API applies checked-in Prisma migrations to persistent embedded PGlite at st
 
 - Booking receipt and key booking status changes create branch-aware in-app notifications for active team members; workspace managers can compose messages and save organization-owned templates.
 - Provider errors and configuration gaps create failed/skipped/queued ledger states. A channel is reported sent only after an explicit provider delivery receipt.
-- AI assistance is opt-in, plan/feature-flag gated, tenant-scoped and logged. Email and Pakistan phone patterns are redacted before text is sent to the provider.
+- Service drafts require an active Growth/Business plan and rollout flag, are tenant-scoped and logged. They use local Ollama by default; an optional OpenAI-compatible endpoint can override it. Email and Pakistan phone patterns are redacted before text is sent to either provider. Help Desk supports local image analysis, PDF text extraction and sampled video frames (Poppler and FFmpeg are required for PDF/video).
 - Quote assistance uses only the selected active service and its configured catalog bounds; it returns draft wording only and never changes quote totals or sends approval.
 
 ## Phase 9 acceptance notes

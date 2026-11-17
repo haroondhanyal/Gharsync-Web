@@ -1,0 +1,3 @@
+ALTER TABLE "users"
+  ADD COLUMN "countryCode" CHAR(2) NOT NULL DEFAULT 'PK',
+  ADD COLUMN "city" VARCHAR(100);
