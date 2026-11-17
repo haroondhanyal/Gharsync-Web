@@ -88,3 +88,4 @@
 .help-model-notice{display:block;margin-top:8px;color:var(--muted,#6f7e78);font-size:8px;line-height:1.5}
 .help-desk-status.ready{background:var(--mint,#e9f0e9);color:var(--green,#287b63)}.help-desk-status.unavailable{background:#f7e8e4;color:#9a4437}
 .ai-access-note{margin:12px 0;padding:10px 12px;border:1px solid var(--line,#e7e9e3);border-radius:7px;background:var(--surface,#f5f6f1);color:var(--muted,#6f7e78);font-size:10px;line-height:1.55}
+.button-primary{color:#fff}:root[data-theme="midnight"] .button-primary{color:#111827}

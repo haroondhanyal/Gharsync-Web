@@ -25,7 +25,7 @@ GharSync is a Pakistan-first workspace for home-service businesses. It connects 
 
 ## Current UI
 
-These screenshots are captured from the running web app in Chrome. Authenticated screens use a local development workspace.
+These screenshots are recaptured from the production build in Chrome. Authenticated screens use synthetic local demo data and a consistent light appearance.
 
 | Screen | Preview |
 |---|---|
@@ -35,8 +35,17 @@ These screenshots are captured from the running web app in Chrome. Authenticated
 | Password recovery | ![GharSync password recovery page](docs/screenshots/gharsync-forgot-password.png) |
 | Business dashboard | ![GharSync business dashboard](docs/screenshots/gharsync-dashboard.png) |
 | Business dashboard · mobile | ![GharSync dashboard on mobile](docs/screenshots/gharsync-dashboard-mobile.png) |
+| Customers | ![GharSync customer directory](docs/screenshots/gharsync-customers.png) |
+| Branch settings | ![GharSync branch settings](docs/screenshots/gharsync-branches.png) |
+| Workforce | ![GharSync workforce](docs/screenshots/gharsync-workforce.png) |
+| Inventory | ![GharSync inventory](docs/screenshots/gharsync-inventory.png) |
+| Warranty claims | ![GharSync warranty claims](docs/screenshots/gharsync-warranty.png) |
 | Notifications | ![GharSync notifications](docs/screenshots/gharsync-notifications.png) |
 | Plans and billing | ![GharSync plans and billing](docs/screenshots/gharsync-billing.png) |
+| Profile settings | ![GharSync profile settings](docs/screenshots/gharsync-profile.png) |
+| Appearance | ![GharSync appearance settings](docs/screenshots/gharsync-appearance.png) |
+| Help Desk and local AI | ![GharSync Help Desk with Ollama ready](docs/screenshots/gharsync-help-desk.png) |
+| AI service assistant | ![GharSync AI service assistant](docs/screenshots/gharsync-assistant.png) |
 
 ## Delivery status
 
